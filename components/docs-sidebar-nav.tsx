@@ -8,7 +8,10 @@ import {
   Settings,
   BookOpen,
   FileText,
+  Github,
+  Star,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 // Define navigation items (может быть передано как пропс или определено здесь)
 const sidebarNavItems = [
@@ -21,9 +24,38 @@ const sidebarNavItems = [
   // Добавьте другие секции по мере необходимости
 ];
 
+// Helper function to format numbers (e.g., 1200 -> 1.2k)
+const formatStars = (stars: number): string => {
+  if (stars >= 1000) {
+    return (stars / 1000).toFixed(1) + "k";
+  }
+  return stars.toString();
+};
+
 export function DocsSidebarNav() {
-  const [activeId, setActiveId] = useState<string | null>(null); // Start with null initially
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [starCount, setStarCount] = useState<number | null>(null);
   const observer = useRef<IntersectionObserver | null>(null);
+
+  // Fetch GitHub stars on mount
+  useEffect(() => {
+    fetch("https://api.github.com/repos/ijustseen/doctalkie-react")
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("Network response was not ok");
+        }
+        return response.json();
+      })
+      .then((data) => {
+        if (data && typeof data.stargazers_count === "number") {
+          setStarCount(data.stargazers_count);
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to fetch GitHub stars:", error);
+        // Keep starCount as null if fetch fails
+      });
+  }, []); // Empty dependency array ensures this runs only once on mount
 
   useEffect(() => {
     // Initialize activeId based on initial hash or first item
@@ -72,8 +104,8 @@ export function DocsSidebarNav() {
   };
 
   return (
-    <nav className="sticky top-16 -mt-10 pt-10 h-[calc(100vh-4rem)] w-full pr-6 overflow-y-auto">
-      <div className="space-y-4">
+    <nav className="sticky top-16 -mt-10 pt-10 h-[calc(100vh-4rem)] w-full pr-6 overflow-y-auto flex flex-col">
+      <div className="space-y-4 flex-grow">
         <p className="font-medium">On this page</p>
         <ul className="space-y-1">
           {sidebarNavItems.map((item) => (
@@ -96,6 +128,28 @@ export function DocsSidebarNav() {
               </a>
             </li>
           ))}
+          {/* GitHub Star Button with count and icon */}
+          <li className="mt-4">
+            <Button variant="outline" size="sm" className="w-full" asChild>
+              <a
+                href="https://github.com/ijustseen/doctalkie-react"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2"
+              >
+                <Github className="h-4 w-4" />
+                <span className="inline-flex items-center">
+                  Star us on GitHub
+                  {starCount !== null && (
+                    <span className="ml-2 inline-flex items-center rounded bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
+                      <Star className="mr-1 h-3 w-3" />
+                      {formatStars(starCount)}
+                    </span>
+                  )}
+                </span>
+              </a>
+            </Button>
+          </li>
         </ul>
       </div>
     </nav>
