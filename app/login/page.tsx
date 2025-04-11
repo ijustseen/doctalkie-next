@@ -58,7 +58,7 @@ export default function LoginPage() {
           <Auth
             supabaseClient={supabase}
             appearance={{ theme: ThemeSupa }}
-            providers={["github"]}
+            providers={["github", "google"]}
             redirectTo={
               process.env.NEXT_PUBLIC_BASE_URL
                 ? `${process.env.NEXT_PUBLIC_BASE_URL}/auth/callback`
