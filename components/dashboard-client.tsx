@@ -23,7 +23,9 @@ import {
   Trash2,
   FileText,
   X as IconX,
-} from "lucide-react"; // Added IconX for remove button
+  Database,
+  Activity,
+} from "lucide-react"; // Added Database and Activity icons
 import CodeBlock from "@/components/code-block";
 import { createClient } from "@/utils/supabase/client"; // Use client-side client for mutations
 import type { User } from "@supabase/supabase-js";
@@ -106,6 +108,18 @@ export default function DashboardClient({
     initialBot?.allowed_origins ?? []
   );
   const [newOriginInput, setNewOriginInput] = useState("");
+
+  // Demo data (replace with actual data later)
+  const currentStorageUsedMB = 2; // Example usage
+  const maxStorageMB = profile?.subscriptions?.max_total_doc_size_mb ?? 5; // From profile or default
+  const storagePercentage = (currentStorageUsedMB / maxStorageMB) * 100;
+
+  const currentRequestsUsed = 120; // Example usage
+  // Assuming a new field `max_requests_month` exists in subscriptions type
+  // Add a type assertion or check if the field exists if necessary
+  const maxRequestsMonth =
+    (profile?.subscriptions as any)?.max_requests_month ?? 500;
+  const requestsPercentage = (currentRequestsUsed / maxRequestsMonth) * 100;
 
   useEffect(() => {
     // Update local state if initialBot changes (e.g., after creation)
@@ -466,7 +480,6 @@ export default function DashboardClient({
               </CardContent>
             </Card>
           ) : (
-            // Use Grid layout with 2/3 + 1/3 split and top alignment
             <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] lg:items-start gap-6">
               {/* Column 1 (2fr): Assistant Settings & API Credentials */}
               <div className="space-y-6">
@@ -660,162 +673,220 @@ export default function DashboardClient({
               </div>
 
               {/* Column 2 (1fr): Documentation Files */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Documentation Files</CardTitle>
-                  <CardDescription>
-                    Manage documents for bot: {bot.name}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-8">
-                  {/* Document List with ScrollArea */}
-                  <div className="space-y-3">
-                    <h4 className="text-sm font-medium">Uploaded Documents</h4>
-                    <ScrollArea className="max-h-60 w-full rounded-md border">
-                      <div className="p-1">
-                        {isLoadingDocs ? (
-                          <div className="flex items-center justify-center text-muted-foreground py-4">
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />{" "}
-                            Loading documents...
-                          </div>
-                        ) : documents.length === 0 ? (
-                          <div className="flex items-center justify-center text-muted-foreground py-4">
-                            <p className="text-sm">
-                              No documents uploaded yet.
-                            </p>
-                          </div>
-                        ) : (
-                          <ul className="divide-y divide-border">
-                            {documents.map((doc) => (
-                              <li
-                                key={doc.id}
-                                className="p-3 flex items-center justify-between gap-4 hover:bg-muted/50 transition-colors"
-                              >
-                                <div className="flex items-center gap-3 overflow-hidden flex-1 min-w-0">
-                                  <FileText className="h-5 w-5 flex-shrink-0 text-muted-foreground" />
-                                  <div className="flex-grow overflow-hidden">
-                                    <p
-                                      className="text-sm font-medium truncate"
-                                      title={doc.file_name}
-                                    >
-                                      {doc.file_name}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground space-x-2">
-                                      <span>
-                                        {formatBytes(doc.file_size_bytes)}
-                                      </span>
-                                      <span>•</span>
-                                      <span>Status: {doc.status}</span>
-                                      <span>•</span>
-                                      <span>
-                                        Uploaded:{" "}
-                                        {new Date(
-                                          doc.uploaded_at
-                                        ).toLocaleDateString()}
-                                      </span>
-                                    </p>
-                                  </div>
-                                </div>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  onClick={() => handleDeleteDocument(doc)}
-                                  disabled={isDeletingDoc === doc.id}
-                                  aria-label="Delete document"
-                                  className="flex-shrink-0"
-                                >
-                                  {isDeletingDoc === doc.id ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                  ) : (
-                                    <Trash2 className="h-4 w-4 text-destructive hover:text-destructive/80" />
-                                  )}
-                                </Button>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                    </ScrollArea>
-                  </div>
-
-                  {/* Upload Area with Drag-n-Drop styling */}
-                  <div
-                    className={cn(
-                      "relative border-2 border-dashed border-border rounded-lg p-8 text-center transition-colors duration-200 ease-in-out",
-                      dragActive
-                        ? "border-primary bg-primary/10"
-                        : "bg-transparent"
-                    )}
-                    onDragEnter={handleDrag}
-                    onDragLeave={handleDrag}
-                    onDragOver={handleDrag}
-                    onDrop={handleDrop}
-                  >
-                    <Upload className="h-9 w-9 text-primary mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold mb-2">
-                      Upload New Document
-                    </h3>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Drag & drop files here or click below
-                    </p>
-                    <p className="text-xs text-muted-foreground mb-5">
-                      Max Size:{" "}
-                      {profile?.subscriptions?.max_total_doc_size_mb ?? 0}MB (
-                      {subscriptionName} plan)
-                    </p>
-
-                    {/* Button to trigger file input */}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="mb-4"
-                      disabled={isUploading}
-                    >
-                      Choose File
-                    </Button>
-                    {/* Hidden file input */}
-                    <Input
-                      id="file-upload-input"
-                      type="file"
-                      ref={fileInputRef}
-                      onChange={handleFileSelect}
-                      className="hidden"
-                      // accept=".pdf,.md,.txt,.html"
-                    />
-
-                    {selectedFile && (
-                      <div className="mt-4 text-sm">
-                        <p className="text-muted-foreground mb-2">
-                          Selected:{" "}
-                          <span className="font-medium text-foreground">
-                            {selectedFile.name}
-                          </span>{" "}
-                          ({formatBytes(selectedFile.size)})
-                        </p>
-                        {isUploading && (
-                          <Progress
-                            value={uploadProgress}
-                            className="w-full h-2 mb-3 max-w-sm mx-auto"
-                          />
-                        )}
-                        <Button
-                          onClick={handleFileUpload}
-                          disabled={!selectedFile || isUploading}
-                          size="sm"
+              <div className="lg:col-span-1 space-y-6">
+                {/* Usage Statistics Card (Should be here) */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Usage Statistics</CardTitle>
+                    <CardDescription>
+                      Your current usage based on the '
+                      {profile?.subscriptions?.name ?? "Free"}' plan.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {/* Storage Usage */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label
+                          htmlFor="storage-progress"
+                          className="flex items-center gap-2"
                         >
-                          {isUploading ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          ) : (
-                            <Upload className="mr-2 h-4 w-4" />
-                          )}
-                          {isUploading ? "Uploading... 0%" : "Upload File"}
-                        </Button>
+                          <Database className="h-4 w-4 text-muted-foreground" />
+                          Document Storage
+                        </Label>
+                        <span className="text-sm text-muted-foreground">
+                          {currentStorageUsedMB} MB / {maxStorageMB} MB
+                        </span>
                       </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+                      <Progress
+                        id="storage-progress"
+                        value={storagePercentage}
+                        className="h-2"
+                      />
+                    </div>
+                    {/* Requests Usage */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label
+                          htmlFor="requests-progress"
+                          className="flex items-center gap-2"
+                        >
+                          <Activity className="h-4 w-4 text-muted-foreground" />
+                          Monthly Requests
+                        </Label>
+                        <span className="text-sm text-muted-foreground">
+                          {currentRequestsUsed} / {maxRequestsMonth}
+                        </span>
+                      </div>
+                      <Progress
+                        id="requests-progress"
+                        value={requestsPercentage}
+                        className="h-2"
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Documentation Files Card (Should be here, after stats) */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Documentation Files</CardTitle>
+                    <CardDescription>
+                      Manage documents for bot: {bot.name}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-8">
+                    {/* Document List with ScrollArea */}
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-medium">
+                        Uploaded Documents
+                      </h4>
+                      <ScrollArea className="max-h-60 w-full rounded-md border">
+                        <div className="p-1">
+                          {isLoadingDocs ? (
+                            <div className="flex items-center justify-center text-muted-foreground py-4">
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />{" "}
+                              Loading documents...
+                            </div>
+                          ) : documents.length === 0 ? (
+                            <div className="flex items-center justify-center text-muted-foreground py-4">
+                              <p className="text-sm">
+                                No documents uploaded yet.
+                              </p>
+                            </div>
+                          ) : (
+                            <ul className="divide-y divide-border">
+                              {documents.map((doc) => (
+                                <li
+                                  key={doc.id}
+                                  className="p-3 flex items-center justify-between gap-4 hover:bg-muted/50 transition-colors"
+                                >
+                                  <div className="flex items-center gap-3 overflow-hidden flex-1 min-w-0">
+                                    <FileText className="h-5 w-5 flex-shrink-0 text-muted-foreground" />
+                                    <div className="flex-grow overflow-hidden">
+                                      <p
+                                        className="text-sm font-medium truncate"
+                                        title={doc.file_name}
+                                      >
+                                        {doc.file_name}
+                                      </p>
+                                      <p className="text-xs text-muted-foreground space-x-2">
+                                        <span>
+                                          {formatBytes(doc.file_size_bytes)}
+                                        </span>
+                                        <span>•</span>
+                                        <span>Status: {doc.status}</span>
+                                        <span>•</span>
+                                        <span>
+                                          Uploaded:{" "}
+                                          {new Date(
+                                            doc.uploaded_at
+                                          ).toLocaleDateString()}
+                                        </span>
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleDeleteDocument(doc)}
+                                    disabled={isDeletingDoc === doc.id}
+                                    aria-label="Delete document"
+                                    className="flex-shrink-0"
+                                  >
+                                    {isDeletingDoc === doc.id ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="h-4 w-4 text-destructive hover:text-destructive/80" />
+                                    )}
+                                  </Button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      </ScrollArea>
+                    </div>
+
+                    {/* Upload Area with Drag-n-Drop styling */}
+                    <div
+                      className={cn(
+                        "relative border-2 border-dashed border-border rounded-lg p-8 text-center transition-colors duration-200 ease-in-out",
+                        dragActive
+                          ? "border-primary bg-primary/10"
+                          : "bg-transparent"
+                      )}
+                      onDragEnter={handleDrag}
+                      onDragLeave={handleDrag}
+                      onDragOver={handleDrag}
+                      onDrop={handleDrop}
+                    >
+                      <Upload className="h-9 w-9 text-primary mx-auto mb-4" />
+                      <h3 className="text-lg font-semibold mb-2">
+                        Upload New Document
+                      </h3>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        Drag & drop files here or click below
+                      </p>
+                      <p className="text-xs text-muted-foreground mb-5">
+                        Max Size:{" "}
+                        {profile?.subscriptions?.max_total_doc_size_mb ?? 0}MB (
+                        {subscriptionName} plan)
+                      </p>
+
+                      {/* Button to trigger file input */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="mb-4"
+                        disabled={isUploading}
+                      >
+                        Choose File
+                      </Button>
+                      {/* Hidden file input */}
+                      <Input
+                        id="file-upload-input"
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleFileSelect}
+                        className="hidden"
+                        // accept=".pdf,.md,.txt,.html"
+                      />
+
+                      {selectedFile && (
+                        <div className="mt-4 text-sm">
+                          <p className="text-muted-foreground mb-2">
+                            Selected:{" "}
+                            <span className="font-medium text-foreground">
+                              {selectedFile.name}
+                            </span>{" "}
+                            ({formatBytes(selectedFile.size)})
+                          </p>
+                          {isUploading && (
+                            <Progress
+                              value={uploadProgress}
+                              className="w-full h-2 mb-3 max-w-sm mx-auto"
+                            />
+                          )}
+                          <Button
+                            onClick={handleFileUpload}
+                            disabled={!selectedFile || isUploading}
+                            size="sm"
+                          >
+                            {isUploading ? (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <Upload className="mr-2 h-4 w-4" />
+                            )}
+                            {isUploading ? "Uploading... 0%" : "Upload File"}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           )}
         </TabsContent>
