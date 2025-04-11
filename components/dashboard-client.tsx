@@ -25,13 +25,14 @@ import {
   X as IconX,
   Database,
   Activity,
-} from "lucide-react"; // Added Database and Activity icons
+  Globe,
+} from "lucide-react";
 import CodeBlock from "@/components/code-block";
-import { createClient } from "@/utils/supabase/client"; // Use client-side client for mutations
+import { createClient } from "@/utils/supabase/client";
 import type { User } from "@supabase/supabase-js";
-import { Progress } from "@/components/ui/progress"; // Import Progress component
-import { ScrollArea } from "@/components/ui/scroll-area"; // Import ScrollArea
-import { cn } from "@/lib/utils"; // Import cn for conditional classes
+import { Progress } from "@/components/ui/progress";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
 
 // Define prop types (basic structure, enhance with full types if available)
 type Subscription = {
@@ -108,6 +109,9 @@ export default function DashboardClient({
     initialBot?.allowed_origins ?? []
   );
   const [newOriginInput, setNewOriginInput] = useState("");
+  const [isDomainRestrictionEnabled, setIsDomainRestrictionEnabled] = useState(
+    !!initialBot?.allowed_origins && initialBot.allowed_origins.length > 0
+  );
 
   // Demo data (replace with actual data later)
   const currentStorageUsedMB = 2; // Example usage
@@ -122,14 +126,15 @@ export default function DashboardClient({
   const requestsPercentage = (currentRequestsUsed / maxRequestsMonth) * 100;
 
   useEffect(() => {
-    // Update local state if initialBot changes (e.g., after creation)
+    // Update local state if initialBot changes
     setBot(initialBot);
     setAssistantName(initialBot?.name ?? "My First Bot");
     setProjectOnly(initialBot?.strict_context ?? true);
-    // Update current origins when initialBot changes
-    setCurrentOrigins(initialBot?.allowed_origins ?? []);
-    setNewOriginInput(""); // Clear input on bot change
-    // Reset file selection when bot changes
+    const initialOrigins = initialBot?.allowed_origins ?? [];
+    setCurrentOrigins(initialOrigins);
+    // Set switch state based on initial origins
+    setIsDomainRestrictionEnabled(initialOrigins.length > 0);
+    setNewOriginInput("");
     setSelectedFile(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -175,15 +180,15 @@ export default function DashboardClient({
     if (!bot) return;
     setIsSaving(true);
 
-    // Use the currentOrigins state array
-    const originsToSave = currentOrigins.length > 0 ? currentOrigins : null;
+    // Determine origins to save based on the switch state
+    const originsToSave = isDomainRestrictionEnabled ? currentOrigins : null;
 
     const { data, error } = await supabase
       .from("bots")
       .update({
         name: assistantName,
         strict_context: projectOnly,
-        allowed_origins: originsToSave, // Save the array from state
+        allowed_origins: originsToSave, // Save null if switch is off, array if on
       })
       .eq("id", bot.id)
       .select()
@@ -191,16 +196,26 @@ export default function DashboardClient({
 
     if (error) {
       console.error("Error saving bot settings:", error);
-      // Add error toast notification
     } else {
       const updatedBot = data as Exclude<Bot, null>;
       setBot(updatedBot);
-      // Ensure UI state matches saved state (handles case where null was saved)
-      setCurrentOrigins(updatedBot.allowed_origins ?? []);
+      // Update local state to match saved state
+      const savedOrigins = updatedBot.allowed_origins ?? [];
+      setCurrentOrigins(savedOrigins);
+      setIsDomainRestrictionEnabled(savedOrigins.length > 0);
       console.log("Settings saved!");
-      // Add success toast notification
     }
     setIsSaving(false);
+  };
+
+  // Handler for toggling the domain restriction switch
+  const handleDomainRestrictionToggle = (checked: boolean) => {
+    setIsDomainRestrictionEnabled(checked);
+    // If turning restriction OFF, clear the current origins list
+    if (!checked) {
+      setCurrentOrigins([]);
+    }
+    // If turning ON, the user will add origins via the UI
   };
 
   // Handler to add a new origin
@@ -488,101 +503,110 @@ export default function DashboardClient({
                   <CardHeader>
                     <CardTitle>Assistant Settings</CardTitle>
                     <CardDescription>
-                      Customize how your AI assistant behaves ({bot.id})
+                      Configure the behavior of your assistant.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
-                    {/* Assistant Name Input */}
+                    {/* Assistant Name */}
                     <div className="space-y-2">
                       <Label htmlFor="assistant-name">Assistant Name</Label>
                       <Input
                         id="assistant-name"
                         value={assistantName}
                         onChange={(e) => setAssistantName(e.target.value)}
-                        placeholder="DocTalkie"
+                        placeholder="My Documentation Bot"
                       />
-                      <p className="text-sm text-muted-foreground">
-                        This name is for your reference and can be displayed in
-                        the chat.
-                      </p>
                     </div>
 
-                    {/* Allowed Origins Management */}
-                    <div className="space-y-4">
-                      <Label>Allowed Origins</Label>
-                      {/* List of current origins */}
-                      <div className="space-y-2 rounded-md border p-3 min-h-[60px]">
-                        {currentOrigins.length === 0 ? (
-                          <p className="text-xs text-muted-foreground text-center py-2">
-                            No origins added. API requests will be allowed from
-                            anywhere.
-                          </p>
-                        ) : (
-                          <ul className="space-y-1">
-                            {currentOrigins.map((origin, index) => (
-                              <li
-                                key={index}
-                                className="flex items-center justify-between text-sm bg-muted/50 p-2 rounded"
-                              >
-                                <span className="font-mono break-all">
-                                  {origin}
-                                </span>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-6 w-6 flex-shrink-0"
-                                  onClick={() => handleRemoveOrigin(origin)}
-                                  aria-label={`Remove ${origin}`}
-                                >
-                                  <IconX className="h-4 w-4" />
-                                </Button>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-                      {/* Input to add new origin */}
-                      <div className="flex gap-2">
-                        <Input
-                          id="new-origin"
-                          placeholder="https://your-website.com or https://*.domain.com"
-                          value={newOriginInput}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                            setNewOriginInput(e.target.value)
-                          }
-                          onKeyDown={(
-                            e: React.KeyboardEvent<HTMLInputElement>
-                          ) => {
-                            if (e.key === "Enter") handleAddOrigin();
-                          }}
-                        />
-                        <Button onClick={handleAddOrigin} variant="secondary">
-                          Add
-                        </Button>
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        Enter domains allowed to use this bot's API key. Use `*`
-                        as a wildcard (e.g., `https://*.example.com`). Leave
-                        empty to allow any origin (less secure).
-                      </p>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <Label htmlFor="project-only">
-                          Answer only project-related questions
-                        </Label>
-                        <p className="text-sm text-muted-foreground">
-                          When enabled, the assistant will only use your
-                          documentation context.
-                        </p>
-                      </div>
+                    {/* Project Only Switch */}
+                    <div className="flex items-center justify-between space-x-2 border p-4 rounded-md">
+                      <Label
+                        htmlFor="project-only-switch"
+                        className="flex flex-col space-y-1"
+                      >
+                        <span>Answer only project-related questions</span>
+                        <span className="font-normal leading-snug text-muted-foreground">
+                          Limit responses to the content of your uploaded
+                          documents.
+                        </span>
+                      </Label>
                       <Switch
-                        id="project-only"
+                        id="project-only-switch"
                         checked={projectOnly}
                         onCheckedChange={setProjectOnly}
                       />
                     </div>
+
+                    {/* Domain Restriction Switch */}
+                    <div className="flex items-center justify-between space-x-2 border p-4 rounded-md">
+                      <Label
+                        htmlFor="domain-restriction-switch"
+                        className="flex flex-col space-y-1"
+                      >
+                        <span>Restrict access by domain</span>
+                        <span className="font-normal leading-snug text-muted-foreground">
+                          Allow chat widget integration only from specified
+                          domains.
+                        </span>
+                      </Label>
+                      <Switch
+                        id="domain-restriction-switch"
+                        checked={isDomainRestrictionEnabled}
+                        onCheckedChange={handleDomainRestrictionToggle}
+                      />
+                    </div>
+
+                    {/* Allowed Domains Input/List (conditionally rendered) MOVED HERE */}
+                    {isDomainRestrictionEnabled && (
+                      <div className="space-y-4 pt-4 border-t border-border/40 mt-4">
+                        <Label className="flex items-center gap-2 text-sm font-medium">
+                          <Globe className="h-4 w-4 text-muted-foreground" />
+                          Allowed Domains
+                        </Label>
+                        <p className="text-sm text-muted-foreground">
+                          Specify the domains where your chat widget can be
+                          embedded. Use * for wildcard subdomains (e.g.,
+                          *.example.com).
+                        </p>
+                        <div className="flex space-x-2">
+                          <Input
+                            value={newOriginInput}
+                            onChange={(e) => setNewOriginInput(e.target.value)}
+                            placeholder="e.g., https://example.com or *.myapp.com"
+                            className="h-9" // Adjusted height
+                          />
+                          <Button onClick={handleAddOrigin} size="sm">
+                            Add
+                          </Button>
+                        </div>
+                        {currentOrigins.length > 0 && (
+                          <ScrollArea className="max-h-32 w-full rounded-md border">
+                            <div className="p-4">
+                              <ul className="space-y-2">
+                                {currentOrigins.map((origin) => (
+                                  <li
+                                    key={origin}
+                                    className="flex items-center justify-between text-sm bg-muted/50 p-2 rounded-md"
+                                  >
+                                    <span className="break-all font-mono">
+                                      {origin}
+                                    </span>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-6 w-6 shrink-0"
+                                      onClick={() => handleRemoveOrigin(origin)}
+                                    >
+                                      <IconX className="h-4 w-4" />
+                                    </Button>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          </ScrollArea>
+                        )}
+                      </div>
+                    )}
 
                     {/* Save Button */}
                     <div className="pt-4">
