@@ -1,7 +1,14 @@
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Check, X } from "lucide-react"
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Check, X, Sparkles } from "lucide-react";
 
 const plans = [
   {
@@ -19,7 +26,7 @@ const plans = [
       { name: "Priority support", included: false },
     ],
     cta: "Get Started",
-    popular: false,
+    popular: true,
   },
   {
     name: "Pro",
@@ -36,7 +43,7 @@ const plans = [
       { name: "Priority support", included: false },
     ],
     cta: "Choose Pro",
-    popular: true,
+    popular: false,
   },
   {
     name: "Premium",
@@ -55,25 +62,29 @@ const plans = [
     cta: "Choose Premium",
     popular: false,
   },
-]
+];
 
 export default function PlansPage() {
   return (
-    <div className="py-12 md:py-20">
+    <div className="py-8 md:py-12">
       <div className="container px-4 md:px-6">
         <div className="flex flex-col items-center text-center space-y-4 mb-12">
-          <h1 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl">Choose the right plan for you</h1>
+          <h1 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl">
+            Choose the right plan for you
+          </h1>
           <p className="mx-auto max-w-[700px] text-muted-foreground md:text-xl">
-            Whether you're just getting started or building something big, we have a plan that's right for you.
+            Start for free, upgrade when you need more power.
           </p>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-6">
+        <div className="grid md:grid-cols-3 gap-6 items-start">
           {plans.map((plan) => (
             <Card
               key={plan.name}
-              className={`flex flex-col ${
-                plan.popular ? "border-primary relative shadow-lg shadow-primary/10" : "border-border"
+              className={`flex flex-col h-full ${
+                plan.popular
+                  ? "border-primary relative shadow-lg shadow-primary/10"
+                  : "border-border"
               }`}
             >
               {plan.popular && (
@@ -86,7 +97,9 @@ export default function PlansPage() {
                 <CardDescription>{plan.description}</CardDescription>
                 <div className="mt-4">
                   <span className="text-4xl font-bold">{plan.price}</span>
-                  <span className="text-muted-foreground ml-2">{plan.period}</span>
+                  <span className="text-muted-foreground ml-2">
+                    {plan.period}
+                  </span>
                 </div>
               </CardHeader>
               <CardContent className="flex-1">
@@ -98,17 +111,38 @@ export default function PlansPage() {
                       ) : (
                         <X className="h-5 w-5 text-muted-foreground mr-2 shrink-0" />
                       )}
-                      <span className={feature.included ? "" : "text-muted-foreground"}>{feature.name}</span>
+                      <span
+                        className={
+                          feature.included ? "" : "text-muted-foreground"
+                        }
+                      >
+                        {feature.name}
+                      </span>
                     </li>
                   ))}
                 </ul>
               </CardContent>
               <CardFooter>
-                <Link href="/signup" className="w-full">
-                  <Button className="w-full" variant={plan.popular ? "default" : "outline"}>
-                    {plan.cta}
+                {plan.name === "Free" ? (
+                  <Link href="/signup" className="w-full">
+                    <Button
+                      className="w-full"
+                      variant={plan.popular ? "default" : "outline"}
+                    >
+                      {plan.cta}
+                    </Button>
+                  </Link>
+                ) : (
+                  <Button
+                    className="w-full"
+                    variant={plan.popular ? "default" : "outline"}
+                    disabled
+                  >
+                    <Sparkles className="mr-2 h-4 w-4 opacity-70" />
+                    Coming Soon
+                    <Sparkles className="mr-2 h-4 w-4 opacity-70" />
                   </Button>
-                </Link>
+                )}
               </CardFooter>
             </Card>
           ))}
@@ -117,7 +151,8 @@ export default function PlansPage() {
         <div className="mt-12 text-center">
           <h2 className="text-2xl font-bold mb-4">Need something custom?</h2>
           <p className="text-muted-foreground mb-6 max-w-2xl mx-auto">
-            We offer custom plans for large enterprises with specific needs. Contact us to discuss your requirements.
+            We offer custom plans for large enterprises with specific needs.
+            Contact us to discuss your requirements.
           </p>
           <Link href="#">
             <Button variant="outline">Contact Sales</Button>
@@ -125,5 +160,5 @@ export default function PlansPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

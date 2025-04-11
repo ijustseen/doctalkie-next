@@ -416,9 +416,9 @@ export default function DashboardClient({
         </TabsList>
 
         {/* Settings Tab */}
-        <TabsContent value="settings" className="space-y-6">
+        <TabsContent value="settings">
           {!bot ? (
-            // Show Create Bot Card if no bot exists
+            // Show Create Bot Card if no bot exists (full width)
             <Card>
               <CardHeader>
                 <CardTitle>Create Your First Bot</CardTitle>
@@ -466,354 +466,357 @@ export default function DashboardClient({
               </CardContent>
             </Card>
           ) : (
-            // Show Bot Settings if bot exists
-            <>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Assistant Settings</CardTitle>
-                  <CardDescription>
-                    Customize how your AI assistant behaves ({bot.id})
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="space-y-2">
-                    <Label htmlFor="assistant-name">Assistant Name</Label>
-                    <Input
-                      id="assistant-name"
-                      value={assistantName}
-                      onChange={(e) => setAssistantName(e.target.value)}
-                      placeholder="DocTalkie"
-                    />
-                    <p className="text-sm text-muted-foreground">
-                      This name is for your reference and can be displayed in
-                      the chat.
-                    </p>
-                  </div>
-
-                  {/* Allowed Origins Management */}
-                  <div className="space-y-4">
-                    <Label>Allowed Origins</Label>
-                    {/* List of current origins */}
-                    <div className="space-y-2 rounded-md border p-3 min-h-[60px]">
-                      {currentOrigins.length === 0 ? (
-                        <p className="text-xs text-muted-foreground text-center py-2">
-                          No origins added. API requests will be allowed from
-                          anywhere.
-                        </p>
-                      ) : (
-                        <ul className="space-y-1">
-                          {currentOrigins.map((origin, index) => (
-                            <li
-                              key={index}
-                              className="flex items-center justify-between text-sm bg-muted/50 p-2 rounded"
-                            >
-                              <span className="font-mono break-all">
-                                {origin}
-                              </span>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6 flex-shrink-0"
-                                onClick={() => handleRemoveOrigin(origin)}
-                                aria-label={`Remove ${origin}`}
-                              >
-                                <IconX className="h-4 w-4" />
-                              </Button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                    {/* Input to add new origin */}
-                    <div className="flex gap-2">
-                      <Input
-                        id="new-origin"
-                        placeholder="https://your-website.com or https://*.domain.com"
-                        value={newOriginInput}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                          setNewOriginInput(e.target.value)
-                        }
-                        onKeyDown={(
-                          e: React.KeyboardEvent<HTMLInputElement>
-                        ) => {
-                          if (e.key === "Enter") handleAddOrigin();
-                        }}
-                      />
-                      <Button onClick={handleAddOrigin} variant="secondary">
-                        Add
-                      </Button>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Enter domains allowed to use this bot's API key. Use `*`
-                      as a wildcard (e.g., `https://*.example.com`). Leave empty
-                      to allow any origin (less secure).
-                    </p>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="project-only">
-                        Answer only project-related questions
-                      </Label>
-                      <p className="text-sm text-muted-foreground">
-                        When enabled, the assistant will only use your
-                        documentation context.
-                      </p>
-                    </div>
-                    <Switch
-                      id="project-only"
-                      checked={projectOnly}
-                      onCheckedChange={setProjectOnly}
-                    />
-                  </div>
-
-                  <div className="pt-4">
-                    <Button onClick={handleSaveSettings} disabled={isSaving}>
-                      {isSaving && (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      )}
-                      Save Settings
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>API Credentials</CardTitle>
-                  <CardDescription>
-                    Use these to integrate your bot.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="api-url">API URL</Label>
-                    <div className="flex">
-                      <Input
-                        id="api-url"
-                        value={bot.api_url ?? "N/A"}
-                        readOnly
-                        className="rounded-r-none"
-                      />
-                      <Button
-                        variant="secondary"
-                        size="icon"
-                        className="rounded-l-none"
-                        onClick={() => copyToClipboard(bot.api_url)}
-                        disabled={!bot.api_url}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="api-key">API Key</Label>
-                    <div className="flex">
-                      <Input
-                        id="api-key"
-                        value={
-                          showApiKey
-                            ? bot.api_key ?? "N/A"
-                            : "•".repeat(bot.api_key?.length ?? 3)
-                        }
-                        readOnly
-                        className="rounded-r-none font-mono"
-                        disabled={!bot.api_key}
-                      />
-                      <Button
-                        variant="secondary"
-                        size="icon"
-                        className="rounded-none border-x-0"
-                        onClick={() => setShowApiKey(!showApiKey)}
-                        disabled={!bot.api_key}
-                      >
-                        {showApiKey ? (
-                          <EyeOff className="h-4 w-4" />
-                        ) : (
-                          <Eye className="h-4 w-4" />
-                        )}
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        size="icon"
-                        className="rounded-l-none"
-                        onClick={() => copyToClipboard(bot.api_key)}
-                        disabled={!bot.api_key}
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      Keep this key secret. Use it server-side or in secure
-                      environments.
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Documentation Upload Area - Shown only if bot exists */}
-              {bot && (
+            // Use Grid layout with 2/3 + 1/3 split and top alignment
+            <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] lg:items-start gap-6">
+              {/* Column 1 (2fr): Assistant Settings & API Credentials */}
+              <div className="space-y-6">
+                {/* Assistant Settings Card */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Documentation Files</CardTitle>
+                    <CardTitle>Assistant Settings</CardTitle>
                     <CardDescription>
-                      Manage documents for bot: {bot.name}
+                      Customize how your AI assistant behaves ({bot.id})
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-8">
-                    {/* Document List with ScrollArea */}
-                    <div className="space-y-3">
-                      <h4 className="text-sm font-medium">
-                        Uploaded Documents
-                      </h4>
-                      <ScrollArea className="max-h-60 w-full rounded-md border">
-                        <div className="p-1">
-                          {isLoadingDocs ? (
-                            <div className="flex items-center justify-center text-muted-foreground py-4">
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />{" "}
-                              Loading documents...
-                            </div>
-                          ) : documents.length === 0 ? (
-                            <div className="flex items-center justify-center text-muted-foreground py-4">
-                              <p className="text-sm">
-                                No documents uploaded yet.
-                              </p>
-                            </div>
-                          ) : (
-                            <ul className="divide-y divide-border">
-                              {documents.map((doc) => (
-                                <li
-                                  key={doc.id}
-                                  className="p-3 flex items-center justify-between gap-4 hover:bg-muted/50 transition-colors"
-                                >
-                                  <div className="flex items-center gap-3 overflow-hidden flex-1 min-w-0">
-                                    <FileText className="h-5 w-5 flex-shrink-0 text-muted-foreground" />
-                                    <div className="flex-grow overflow-hidden">
-                                      <p
-                                        className="text-sm font-medium truncate"
-                                        title={doc.file_name}
-                                      >
-                                        {doc.file_name}
-                                      </p>
-                                      <p className="text-xs text-muted-foreground space-x-2">
-                                        <span>
-                                          {formatBytes(doc.file_size_bytes)}
-                                        </span>
-                                        <span>•</span>
-                                        <span>Status: {doc.status}</span>
-                                        <span>•</span>
-                                        <span>
-                                          Uploaded:{" "}
-                                          {new Date(
-                                            doc.uploaded_at
-                                          ).toLocaleDateString()}
-                                        </span>
-                                      </p>
-                                    </div>
-                                  </div>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => handleDeleteDocument(doc)}
-                                    disabled={isDeletingDoc === doc.id}
-                                    aria-label="Delete document"
-                                    className="flex-shrink-0"
-                                  >
-                                    {isDeletingDoc === doc.id ? (
-                                      <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                      <Trash2 className="h-4 w-4 text-destructive hover:text-destructive/80" />
-                                    )}
-                                  </Button>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      </ScrollArea>
+                  <CardContent className="space-y-6">
+                    {/* Assistant Name Input */}
+                    <div className="space-y-2">
+                      <Label htmlFor="assistant-name">Assistant Name</Label>
+                      <Input
+                        id="assistant-name"
+                        value={assistantName}
+                        onChange={(e) => setAssistantName(e.target.value)}
+                        placeholder="DocTalkie"
+                      />
+                      <p className="text-sm text-muted-foreground">
+                        This name is for your reference and can be displayed in
+                        the chat.
+                      </p>
                     </div>
 
-                    {/* Upload Area with Drag-n-Drop styling */}
-                    <div
-                      className={cn(
-                        "relative border-2 border-dashed border-border rounded-lg p-8 text-center transition-colors duration-200 ease-in-out",
-                        dragActive
-                          ? "border-primary bg-primary/10"
-                          : "bg-transparent"
-                      )}
-                      onDragEnter={handleDrag}
-                      onDragLeave={handleDrag}
-                      onDragOver={handleDrag}
-                      onDrop={handleDrop}
-                    >
-                      <Upload className="h-9 w-9 text-primary mx-auto mb-4" />
-                      <h3 className="text-lg font-semibold mb-2">
-                        Upload New Document
-                      </h3>
-                      <p className="text-sm text-muted-foreground mb-4">
-                        Drag & drop files here or click below
-                      </p>
-                      <p className="text-xs text-muted-foreground mb-5">
-                        Max Size:{" "}
-                        {profile?.subscriptions?.max_total_doc_size_mb ?? 0}MB (
-                        {subscriptionName} plan)
-                      </p>
-
-                      {/* Button to trigger file input */}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="mb-4"
-                        disabled={isUploading}
-                      >
-                        Choose File
-                      </Button>
-                      {/* Hidden file input */}
-                      <Input
-                        id="file-upload-input"
-                        type="file"
-                        ref={fileInputRef}
-                        onChange={handleFileSelect}
-                        className="hidden"
-                        // accept=".pdf,.md,.txt,.html"
-                      />
-
-                      {selectedFile && (
-                        <div className="mt-4 text-sm">
-                          <p className="text-muted-foreground mb-2">
-                            Selected:{" "}
-                            <span className="font-medium text-foreground">
-                              {selectedFile.name}
-                            </span>{" "}
-                            ({formatBytes(selectedFile.size)})
+                    {/* Allowed Origins Management */}
+                    <div className="space-y-4">
+                      <Label>Allowed Origins</Label>
+                      {/* List of current origins */}
+                      <div className="space-y-2 rounded-md border p-3 min-h-[60px]">
+                        {currentOrigins.length === 0 ? (
+                          <p className="text-xs text-muted-foreground text-center py-2">
+                            No origins added. API requests will be allowed from
+                            anywhere.
                           </p>
-                          {isUploading && (
-                            <Progress
-                              value={uploadProgress}
-                              className="w-full h-2 mb-3 max-w-sm mx-auto"
-                            />
-                          )}
-                          <Button
-                            onClick={handleFileUpload}
-                            disabled={!selectedFile || isUploading}
-                            size="sm"
-                          >
-                            {isUploading ? (
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            ) : (
-                              <Upload className="mr-2 h-4 w-4" />
-                            )}
-                            {isUploading ? "Uploading... 0%" : "Upload File"}
-                          </Button>
-                        </div>
-                      )}
+                        ) : (
+                          <ul className="space-y-1">
+                            {currentOrigins.map((origin, index) => (
+                              <li
+                                key={index}
+                                className="flex items-center justify-between text-sm bg-muted/50 p-2 rounded"
+                              >
+                                <span className="font-mono break-all">
+                                  {origin}
+                                </span>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 flex-shrink-0"
+                                  onClick={() => handleRemoveOrigin(origin)}
+                                  aria-label={`Remove ${origin}`}
+                                >
+                                  <IconX className="h-4 w-4" />
+                                </Button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                      {/* Input to add new origin */}
+                      <div className="flex gap-2">
+                        <Input
+                          id="new-origin"
+                          placeholder="https://your-website.com or https://*.domain.com"
+                          value={newOriginInput}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                            setNewOriginInput(e.target.value)
+                          }
+                          onKeyDown={(
+                            e: React.KeyboardEvent<HTMLInputElement>
+                          ) => {
+                            if (e.key === "Enter") handleAddOrigin();
+                          }}
+                        />
+                        <Button onClick={handleAddOrigin} variant="secondary">
+                          Add
+                        </Button>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Enter domains allowed to use this bot's API key. Use `*`
+                        as a wildcard (e.g., `https://*.example.com`). Leave
+                        empty to allow any origin (less secure).
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label htmlFor="project-only">
+                          Answer only project-related questions
+                        </Label>
+                        <p className="text-sm text-muted-foreground">
+                          When enabled, the assistant will only use your
+                          documentation context.
+                        </p>
+                      </div>
+                      <Switch
+                        id="project-only"
+                        checked={projectOnly}
+                        onCheckedChange={setProjectOnly}
+                      />
+                    </div>
+
+                    {/* Save Button */}
+                    <div className="pt-4">
+                      <Button onClick={handleSaveSettings} disabled={isSaving}>
+                        {isSaving && (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        )}
+                        Save Settings
+                      </Button>
                     </div>
                   </CardContent>
                 </Card>
-              )}
-            </>
+
+                {/* API Credentials Card (Moved to Column 1) */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>API Credentials</CardTitle>
+                    <CardDescription>
+                      Use these to integrate your bot.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="api-url">API URL</Label>
+                      <div className="flex">
+                        <Input
+                          id="api-url"
+                          value={bot.api_url ?? "N/A"}
+                          readOnly
+                          className="rounded-r-none"
+                        />
+                        <Button
+                          variant="secondary"
+                          size="icon"
+                          className="rounded-l-none"
+                          onClick={() => copyToClipboard(bot.api_url)}
+                          disabled={!bot.api_url}
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="api-key">API Key</Label>
+                      <div className="flex">
+                        <Input
+                          id="api-key"
+                          value={
+                            showApiKey
+                              ? bot.api_key ?? "N/A"
+                              : "•".repeat(bot.api_key?.length ?? 3)
+                          }
+                          readOnly
+                          className="rounded-r-none font-mono"
+                          disabled={!bot.api_key}
+                        />
+                        <Button
+                          variant="secondary"
+                          size="icon"
+                          className="rounded-none border-x-0"
+                          onClick={() => setShowApiKey(!showApiKey)}
+                          disabled={!bot.api_key}
+                        >
+                          {showApiKey ? (
+                            <EyeOff className="h-4 w-4" />
+                          ) : (
+                            <Eye className="h-4 w-4" />
+                          )}
+                        </Button>
+                        <Button
+                          variant="secondary"
+                          size="icon"
+                          className="rounded-l-none"
+                          onClick={() => copyToClipboard(bot.api_key)}
+                          disabled={!bot.api_key}
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Keep this key secret. Use it server-side or in secure
+                        environments.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Column 2 (1fr): Documentation Files */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Documentation Files</CardTitle>
+                  <CardDescription>
+                    Manage documents for bot: {bot.name}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-8">
+                  {/* Document List with ScrollArea */}
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-medium">Uploaded Documents</h4>
+                    <ScrollArea className="max-h-60 w-full rounded-md border">
+                      <div className="p-1">
+                        {isLoadingDocs ? (
+                          <div className="flex items-center justify-center text-muted-foreground py-4">
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />{" "}
+                            Loading documents...
+                          </div>
+                        ) : documents.length === 0 ? (
+                          <div className="flex items-center justify-center text-muted-foreground py-4">
+                            <p className="text-sm">
+                              No documents uploaded yet.
+                            </p>
+                          </div>
+                        ) : (
+                          <ul className="divide-y divide-border">
+                            {documents.map((doc) => (
+                              <li
+                                key={doc.id}
+                                className="p-3 flex items-center justify-between gap-4 hover:bg-muted/50 transition-colors"
+                              >
+                                <div className="flex items-center gap-3 overflow-hidden flex-1 min-w-0">
+                                  <FileText className="h-5 w-5 flex-shrink-0 text-muted-foreground" />
+                                  <div className="flex-grow overflow-hidden">
+                                    <p
+                                      className="text-sm font-medium truncate"
+                                      title={doc.file_name}
+                                    >
+                                      {doc.file_name}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground space-x-2">
+                                      <span>
+                                        {formatBytes(doc.file_size_bytes)}
+                                      </span>
+                                      <span>•</span>
+                                      <span>Status: {doc.status}</span>
+                                      <span>•</span>
+                                      <span>
+                                        Uploaded:{" "}
+                                        {new Date(
+                                          doc.uploaded_at
+                                        ).toLocaleDateString()}
+                                      </span>
+                                    </p>
+                                  </div>
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleDeleteDocument(doc)}
+                                  disabled={isDeletingDoc === doc.id}
+                                  aria-label="Delete document"
+                                  className="flex-shrink-0"
+                                >
+                                  {isDeletingDoc === doc.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Trash2 className="h-4 w-4 text-destructive hover:text-destructive/80" />
+                                  )}
+                                </Button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    </ScrollArea>
+                  </div>
+
+                  {/* Upload Area with Drag-n-Drop styling */}
+                  <div
+                    className={cn(
+                      "relative border-2 border-dashed border-border rounded-lg p-8 text-center transition-colors duration-200 ease-in-out",
+                      dragActive
+                        ? "border-primary bg-primary/10"
+                        : "bg-transparent"
+                    )}
+                    onDragEnter={handleDrag}
+                    onDragLeave={handleDrag}
+                    onDragOver={handleDrag}
+                    onDrop={handleDrop}
+                  >
+                    <Upload className="h-9 w-9 text-primary mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold mb-2">
+                      Upload New Document
+                    </h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Drag & drop files here or click below
+                    </p>
+                    <p className="text-xs text-muted-foreground mb-5">
+                      Max Size:{" "}
+                      {profile?.subscriptions?.max_total_doc_size_mb ?? 0}MB (
+                      {subscriptionName} plan)
+                    </p>
+
+                    {/* Button to trigger file input */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="mb-4"
+                      disabled={isUploading}
+                    >
+                      Choose File
+                    </Button>
+                    {/* Hidden file input */}
+                    <Input
+                      id="file-upload-input"
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleFileSelect}
+                      className="hidden"
+                      // accept=".pdf,.md,.txt,.html"
+                    />
+
+                    {selectedFile && (
+                      <div className="mt-4 text-sm">
+                        <p className="text-muted-foreground mb-2">
+                          Selected:{" "}
+                          <span className="font-medium text-foreground">
+                            {selectedFile.name}
+                          </span>{" "}
+                          ({formatBytes(selectedFile.size)})
+                        </p>
+                        {isUploading && (
+                          <Progress
+                            value={uploadProgress}
+                            className="w-full h-2 mb-3 max-w-sm mx-auto"
+                          />
+                        )}
+                        <Button
+                          onClick={handleFileUpload}
+                          disabled={!selectedFile || isUploading}
+                          size="sm"
+                        >
+                          {isUploading ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <Upload className="mr-2 h-4 w-4" />
+                          )}
+                          {isUploading ? "Uploading... 0%" : "Upload File"}
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           )}
         </TabsContent>
 

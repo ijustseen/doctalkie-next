@@ -2,6 +2,7 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import DashboardClient from "@/components/dashboard-client";
+import ChatWidget from "@/components/chat-widget";
 
 export const dynamic = "force-dynamic";
 
@@ -111,10 +112,13 @@ export default async function DashboardPage() {
   };
 
   return (
-    <DashboardClient
-      user={user}
-      profile={profileWithSubscription}
-      initialBot={bot ?? null}
-    />
+    <>
+      <DashboardClient
+        user={user}
+        profile={profileWithSubscription}
+        initialBot={bot ?? null}
+      />
+      <ChatWidget />
+    </>
   );
 }
