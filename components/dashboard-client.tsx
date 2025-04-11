@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -13,10 +13,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Copy, Eye, EyeOff, Upload, PlusCircle, Loader2 } from "lucide-react"; // Added icons
+import {
+  Copy,
+  Eye,
+  EyeOff,
+  Upload,
+  PlusCircle,
+  Loader2,
+  Trash2,
+  FileText,
+} from "lucide-react"; // Added icons
 import CodeBlock from "@/components/code-block";
 import { createClient } from "@/utils/supabase/client"; // Use client-side client for mutations
 import type { User } from "@supabase/supabase-js";
+import { Progress } from "@/components/ui/progress"; // Import Progress component
+import { ScrollArea } from "@/components/ui/scroll-area"; // Import ScrollArea
+import { cn } from "@/lib/utils"; // Import cn for conditional classes
 
 // Define prop types (basic structure, enhance with full types if available)
 type Subscription = {
@@ -41,6 +53,17 @@ type Bot = {
   api_url: string;
 } | null;
 
+// Add Document type
+type Document = {
+  id: string;
+  bot_id: string;
+  file_name: string;
+  storage_path: string;
+  file_size_bytes: number;
+  status: string; // 'uploaded', 'processing', 'ready', 'error'
+  uploaded_at: string;
+};
+
 interface DashboardClientProps {
   user: User;
   profile: Profile;
@@ -64,18 +87,62 @@ export default function DashboardClient({
   const [isSaving, setIsSaving] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
 
+  // State for file upload
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // State for documents list
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [isLoadingDocs, setIsLoadingDocs] = useState(false);
+  const [isDeletingDoc, setIsDeletingDoc] = useState<string | null>(null); // Store ID of doc being deleted
+  const [dragActive, setDragActive] = useState(false); // State for drag-n-drop visuals
+
   useEffect(() => {
     // Update local state if initialBot changes (e.g., after creation)
     setBot(initialBot);
     setAssistantName(initialBot?.name ?? "My First Bot");
     setProjectOnly(initialBot?.strict_context ?? true);
+    // Reset file selection when bot changes
+    setSelectedFile(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
   }, [initialBot]);
+
+  // Fetch documents when bot ID changes
+  const fetchDocuments = useCallback(async () => {
+    if (!bot) {
+      setDocuments([]);
+      return;
+    }
+    setIsLoadingDocs(true);
+    const { data, error } = await supabase
+      .from("documents")
+      .select("*")
+      .eq("bot_id", bot.id)
+      .order("uploaded_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching documents:", error);
+      setDocuments([]);
+      // Add error toast
+    } else {
+      setDocuments(data as Document[]);
+    }
+    setIsLoadingDocs(false);
+  }, [bot, supabase]);
+
+  useEffect(() => {
+    fetchDocuments();
+  }, [fetchDocuments]);
 
   const copyToClipboard = async (text: string | undefined) => {
     if (text) {
       await navigator.clipboard.writeText(text);
-      // Add toast notification here if desired
       console.log("Copied to clipboard!");
+      // Add toast notification
     }
   };
 
@@ -135,9 +202,143 @@ export default function DashboardClient({
     setIsCreating(false);
   };
 
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      // TODO: Add validation (size, type) based on subscription
+    }
+  };
+
+  const handleFileUpload = async () => {
+    if (!selectedFile || !bot || !user) return;
+
+    setIsUploading(true);
+    setUploadProgress(0);
+    setDragActive(false); // Reset drag state on upload start
+
+    const storagePath = `${user.id}/${bot.id}/${Date.now()}_${
+      selectedFile.name
+    }`; // Unique path
+
+    const { error: uploadError } = await supabase.storage
+      .from("documents")
+      .upload(storagePath, selectedFile, {
+        cacheControl: "3600",
+        upsert: false, // Don't overwrite existing files with the same name (use unique path instead)
+        contentType: selectedFile.type,
+      });
+
+    if (uploadError) {
+      console.error("Error uploading file:", uploadError);
+      setIsUploading(false);
+      // Add error toast
+      return;
+    }
+
+    console.log("File uploaded successfully, path:", storagePath);
+    setUploadProgress(100); // Mark as complete
+
+    // Insert record into public.documents table
+    const { error: dbError } = await supabase.from("documents").insert({
+      bot_id: bot.id,
+      file_name: selectedFile.name,
+      storage_path: storagePath,
+      file_size_bytes: selectedFile.size,
+      status: "uploaded", // Initial status
+    });
+
+    if (dbError) {
+      console.error("Error creating document record:", dbError);
+      // Add error toast
+      // Potentially try to delete the uploaded file from storage if DB insert fails
+      await supabase.storage.from("documents").remove([storagePath]);
+      console.warn("Uploaded file removed due to DB error", storagePath);
+    } else {
+      console.log("Document record created");
+      // Refresh the document list
+      await fetchDocuments();
+      setSelectedFile(null); // Clear selection
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+      // Add success toast
+    }
+
+    setIsUploading(false);
+    setUploadProgress(0);
+  };
+
+  const handleDeleteDocument = async (doc: Document) => {
+    if (!bot || isDeletingDoc) return;
+    setIsDeletingDoc(doc.id);
+
+    // 1. Delete from storage
+    const { error: storageError } = await supabase.storage
+      .from("documents")
+      .remove([doc.storage_path]);
+
+    if (storageError) {
+      console.error("Error deleting file from storage:", storageError);
+      // Don't proceed if storage deletion fails?
+      // Add error toast
+      setIsDeletingDoc(null);
+      return;
+    }
+
+    // 2. Delete from database table
+    const { error: dbError } = await supabase
+      .from("documents")
+      .delete()
+      .eq("id", doc.id);
+
+    if (dbError) {
+      console.error("Error deleting document record:", dbError);
+      // What to do if DB delete fails but storage succeeded? Might need manual cleanup.
+      // Add error toast
+    } else {
+      console.log("Document deleted successfully");
+      // Refresh list optimistically or after success
+      setDocuments(documents.filter((d) => d.id !== doc.id));
+      // Add success toast
+    }
+    setIsDeletingDoc(null);
+  };
+
+  const formatBytes = (bytes: number, decimals = 2) => {
+    if (bytes === 0) return "0 Bytes";
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + " " + sizes[i];
+  };
+
   // Display subscription name, fallback to ID if name is missing
   const subscriptionName =
     profile?.subscriptions?.name ?? profile?.subscription_id ?? "Loading...";
+
+  // Drag-n-drop handlers for visual feedback (actual drop logic not implemented here)
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      setSelectedFile(e.dataTransfer.files[0]);
+      // TODO: Add validation (size, type) based on subscription
+    }
+    // Note: Actual upload should be triggered by button click or further logic
+  };
 
   return (
     <div className="container py-10">
@@ -336,34 +537,167 @@ export default function DashboardClient({
                 </CardContent>
               </Card>
 
-              {/* Placeholder for Documentation Upload Area - shown only if bot exists */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Documentation Files</CardTitle>
-                  <CardDescription>
-                    Upload documents to train bot: {bot.name}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {/* TODO: Implement File Upload and List */}
-                  <div className="border-2 border-dashed border-border rounded-lg p-10 text-center">
-                    <Upload className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
-                    <h3 className="text-lg font-medium mb-2">
-                      Upload Documentation
-                    </h3>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Drag and drop files here or click to browse
-                    </p>
-                    <p className="text-xs text-muted-foreground mb-6">
-                      Max Size:{" "}
-                      {profile?.subscriptions?.max_total_doc_size_mb ?? 0}MB (
-                      {subscriptionName} plan)
-                    </p>
-                    <Button disabled>Upload Files (Coming Soon)</Button>
-                  </div>
-                  {/* TODO: List existing documents */}
-                </CardContent>
-              </Card>
+              {/* Documentation Upload Area - Shown only if bot exists */}
+              {bot && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Documentation Files</CardTitle>
+                    <CardDescription>
+                      Manage documents for bot: {bot.name}
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-8">
+                    {/* Document List with ScrollArea */}
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-medium">
+                        Uploaded Documents
+                      </h4>
+                      <ScrollArea className="max-h-60 w-full rounded-md border">
+                        <div className="p-1">
+                          {isLoadingDocs ? (
+                            <div className="flex items-center justify-center text-muted-foreground py-4">
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />{" "}
+                              Loading documents...
+                            </div>
+                          ) : documents.length === 0 ? (
+                            <div className="flex items-center justify-center text-muted-foreground py-4">
+                              <p className="text-sm">
+                                No documents uploaded yet.
+                              </p>
+                            </div>
+                          ) : (
+                            <ul className="divide-y divide-border">
+                              {documents.map((doc) => (
+                                <li
+                                  key={doc.id}
+                                  className="p-3 flex items-center justify-between gap-4 hover:bg-muted/50 transition-colors"
+                                >
+                                  <div className="flex items-center gap-3 overflow-hidden flex-1 min-w-0">
+                                    <FileText className="h-5 w-5 flex-shrink-0 text-muted-foreground" />
+                                    <div className="flex-grow overflow-hidden">
+                                      <p
+                                        className="text-sm font-medium truncate"
+                                        title={doc.file_name}
+                                      >
+                                        {doc.file_name}
+                                      </p>
+                                      <p className="text-xs text-muted-foreground space-x-2">
+                                        <span>
+                                          {formatBytes(doc.file_size_bytes)}
+                                        </span>
+                                        <span>•</span>
+                                        <span>Status: {doc.status}</span>
+                                        <span>•</span>
+                                        <span>
+                                          Uploaded:{" "}
+                                          {new Date(
+                                            doc.uploaded_at
+                                          ).toLocaleDateString()}
+                                        </span>
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => handleDeleteDocument(doc)}
+                                    disabled={isDeletingDoc === doc.id}
+                                    aria-label="Delete document"
+                                    className="flex-shrink-0"
+                                  >
+                                    {isDeletingDoc === doc.id ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <Trash2 className="h-4 w-4 text-destructive hover:text-destructive/80" />
+                                    )}
+                                  </Button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      </ScrollArea>
+                    </div>
+
+                    {/* Upload Area with Drag-n-Drop styling */}
+                    <div
+                      className={cn(
+                        "relative border-2 border-dashed border-border rounded-lg p-8 text-center transition-colors duration-200 ease-in-out",
+                        dragActive
+                          ? "border-primary bg-primary/10"
+                          : "bg-transparent"
+                      )}
+                      onDragEnter={handleDrag}
+                      onDragLeave={handleDrag}
+                      onDragOver={handleDrag}
+                      onDrop={handleDrop}
+                    >
+                      <Upload className="h-9 w-9 text-primary mx-auto mb-4" />
+                      <h3 className="text-lg font-semibold mb-2">
+                        Upload New Document
+                      </h3>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        Drag & drop files here or click below
+                      </p>
+                      <p className="text-xs text-muted-foreground mb-5">
+                        Max Size:{" "}
+                        {profile?.subscriptions?.max_total_doc_size_mb ?? 0}MB (
+                        {subscriptionName} plan)
+                      </p>
+
+                      {/* Button to trigger file input */}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="mb-4"
+                        disabled={isUploading}
+                      >
+                        Choose File
+                      </Button>
+                      {/* Hidden file input */}
+                      <Input
+                        id="file-upload-input"
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleFileSelect}
+                        className="hidden"
+                        // accept=".pdf,.md,.txt,.html"
+                      />
+
+                      {selectedFile && (
+                        <div className="mt-4 text-sm">
+                          <p className="text-muted-foreground mb-2">
+                            Selected:{" "}
+                            <span className="font-medium text-foreground">
+                              {selectedFile.name}
+                            </span>{" "}
+                            ({formatBytes(selectedFile.size)})
+                          </p>
+                          {isUploading && (
+                            <Progress
+                              value={uploadProgress}
+                              className="w-full h-2 mb-3 max-w-sm mx-auto"
+                            />
+                          )}
+                          <Button
+                            onClick={handleFileUpload}
+                            disabled={!selectedFile || isUploading}
+                            size="sm"
+                          >
+                            {isUploading ? (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <Upload className="mr-2 h-4 w-4" />
+                            )}
+                            {isUploading ? "Uploading... 0%" : "Upload File"}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </>
           )}
         </TabsContent>
