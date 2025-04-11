@@ -87,10 +87,16 @@ export default function Navbar() {
             <div className="h-8 w-24 animate-pulse bg-muted rounded-md"></div>
           ) : user ? (
             <>
+              <Button
+                variant="ghost"
+                onClick={handleLogout}
+                className="text-muted-foreground hover:text-primary hover:bg-transparent"
+              >
+                Log out
+              </Button>
               <Link href="/dashboard">
-                <Button variant="outline">Dashboard</Button>
+                <Button>Dashboard</Button>
               </Link>
-              <Button onClick={handleLogout}>Log out</Button>
             </>
           ) : (
             <>
@@ -137,17 +143,19 @@ export default function Navbar() {
                 <div className="h-10 w-full animate-pulse bg-muted rounded-md mb-2"></div>
               ) : user ? (
                 <>
+                  <Button
+                    onClick={handleLogout}
+                    variant="outline"
+                    className="w-full"
+                  >
+                    Log out
+                  </Button>
                   <Link
                     href="/dashboard"
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    <Button variant="outline" className="w-full">
-                      Dashboard
-                    </Button>
+                    <Button className="w-full">Dashboard</Button>
                   </Link>
-                  <Button onClick={handleLogout} className="w-full">
-                    Log out
-                  </Button>
                 </>
               ) : (
                 <>
