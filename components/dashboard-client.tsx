@@ -22,7 +22,8 @@ import {
   Loader2,
   Trash2,
   FileText,
-} from "lucide-react"; // Added icons
+  X as IconX,
+} from "lucide-react"; // Added IconX for remove button
 import CodeBlock from "@/components/code-block";
 import { createClient } from "@/utils/supabase/client"; // Use client-side client for mutations
 import type { User } from "@supabase/supabase-js";
@@ -51,6 +52,7 @@ type Bot = {
   strict_context: boolean;
   api_key: string;
   api_url: string;
+  allowed_origins: string[] | null; // Added allowed_origins
 } | null;
 
 // Add Document type
@@ -99,11 +101,20 @@ export default function DashboardClient({
   const [isDeletingDoc, setIsDeletingDoc] = useState<string | null>(null); // Store ID of doc being deleted
   const [dragActive, setDragActive] = useState(false); // State for drag-n-drop visuals
 
+  // State for Allowed Origins UI
+  const [currentOrigins, setCurrentOrigins] = useState<string[]>(
+    initialBot?.allowed_origins ?? []
+  );
+  const [newOriginInput, setNewOriginInput] = useState("");
+
   useEffect(() => {
     // Update local state if initialBot changes (e.g., after creation)
     setBot(initialBot);
     setAssistantName(initialBot?.name ?? "My First Bot");
     setProjectOnly(initialBot?.strict_context ?? true);
+    // Update current origins when initialBot changes
+    setCurrentOrigins(initialBot?.allowed_origins ?? []);
+    setNewOriginInput(""); // Clear input on bot change
     // Reset file selection when bot changes
     setSelectedFile(null);
     if (fileInputRef.current) {
@@ -149,9 +160,17 @@ export default function DashboardClient({
   const handleSaveSettings = async () => {
     if (!bot) return;
     setIsSaving(true);
+
+    // Use the currentOrigins state array
+    const originsToSave = currentOrigins.length > 0 ? currentOrigins : null;
+
     const { data, error } = await supabase
       .from("bots")
-      .update({ name: assistantName, strict_context: projectOnly })
+      .update({
+        name: assistantName,
+        strict_context: projectOnly,
+        allowed_origins: originsToSave, // Save the array from state
+      })
       .eq("id", bot.id)
       .select()
       .single();
@@ -160,11 +179,47 @@ export default function DashboardClient({
       console.error("Error saving bot settings:", error);
       // Add error toast notification
     } else {
-      setBot(data as Bot); // Update local state with saved data
+      const updatedBot = data as Exclude<Bot, null>;
+      setBot(updatedBot);
+      // Ensure UI state matches saved state (handles case where null was saved)
+      setCurrentOrigins(updatedBot.allowed_origins ?? []);
       console.log("Settings saved!");
       // Add success toast notification
     }
     setIsSaving(false);
+  };
+
+  // Handler to add a new origin
+  const handleAddOrigin = () => {
+    const newOrigin = newOriginInput.trim();
+    if (newOrigin && !currentOrigins.includes(newOrigin)) {
+      // Basic validation: Check if it looks somewhat like a URL/origin
+      // This is not exhaustive!
+      if (
+        newOrigin.startsWith("http://") ||
+        newOrigin.startsWith("https://") ||
+        newOrigin === "*" ||
+        newOrigin.includes("*.")
+      ) {
+        setCurrentOrigins([...currentOrigins, newOrigin]);
+        setNewOriginInput(""); // Clear input after adding
+      } else {
+        // Add user feedback (e.g., toast) about invalid format
+        console.warn(
+          "Invalid origin format. Must start with http:// or https://, or use wildcards."
+        );
+      }
+    } else if (currentOrigins.includes(newOrigin)) {
+      console.warn("Origin already added.");
+      setNewOriginInput(""); // Clear input even if duplicate
+    }
+  };
+
+  // Handler to remove an origin
+  const handleRemoveOrigin = (originToRemove: string) => {
+    setCurrentOrigins(
+      currentOrigins.filter((origin) => origin !== originToRemove)
+    );
   };
 
   const handleCreateBot = async () => {
@@ -432,6 +487,66 @@ export default function DashboardClient({
                     <p className="text-sm text-muted-foreground">
                       This name is for your reference and can be displayed in
                       the chat.
+                    </p>
+                  </div>
+
+                  {/* Allowed Origins Management */}
+                  <div className="space-y-4">
+                    <Label>Allowed Origins</Label>
+                    {/* List of current origins */}
+                    <div className="space-y-2 rounded-md border p-3 min-h-[60px]">
+                      {currentOrigins.length === 0 ? (
+                        <p className="text-xs text-muted-foreground text-center py-2">
+                          No origins added. API requests will be allowed from
+                          anywhere.
+                        </p>
+                      ) : (
+                        <ul className="space-y-1">
+                          {currentOrigins.map((origin, index) => (
+                            <li
+                              key={index}
+                              className="flex items-center justify-between text-sm bg-muted/50 p-2 rounded"
+                            >
+                              <span className="font-mono break-all">
+                                {origin}
+                              </span>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 flex-shrink-0"
+                                onClick={() => handleRemoveOrigin(origin)}
+                                aria-label={`Remove ${origin}`}
+                              >
+                                <IconX className="h-4 w-4" />
+                              </Button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                    {/* Input to add new origin */}
+                    <div className="flex gap-2">
+                      <Input
+                        id="new-origin"
+                        placeholder="https://your-website.com or https://*.domain.com"
+                        value={newOriginInput}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                          setNewOriginInput(e.target.value)
+                        }
+                        onKeyDown={(
+                          e: React.KeyboardEvent<HTMLInputElement>
+                        ) => {
+                          if (e.key === "Enter") handleAddOrigin();
+                        }}
+                      />
+                      <Button onClick={handleAddOrigin} variant="secondary">
+                        Add
+                      </Button>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Enter domains allowed to use this bot's API key. Use `*`
+                      as a wildcard (e.g., `https://*.example.com`). Leave empty
+                      to allow any origin (less secure).
                     </p>
                   </div>
 
