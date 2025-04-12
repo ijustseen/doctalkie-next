@@ -12,7 +12,7 @@ import {
   MessageCircle,
   Settings,
 } from "lucide-react";
-import ChatWidget from "@/components/chat-widget";
+import DocTalkieChat from "@/components/doc-talkie-chat";
 import { DocsSidebarNav } from "@/components/docs-sidebar-nav";
 
 export default function DocsPage() {
@@ -466,7 +466,13 @@ export default function App() {
         </main>
       </div>
 
-      <ChatWidget />
+      <DocTalkieChat
+        apiURL="http://localhost:3000/api/chat"
+        apiKey="your_api_key_here"
+        accentColor="hsl(var(--primary))"
+        theme="dark"
+        position="bottom-right"
+      />
     </div>
   );
 }

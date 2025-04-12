@@ -1,8 +1,8 @@
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import ChatWidget from "@/components/chat-widget"
-import CodeBlock from "@/components/code-block"
-import { ArrowRight, CheckCircle2, Code, FileText, Zap } from "lucide-react"
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import ChatWidget from "@/components/doc-talkie-chat";
+import CodeBlock from "@/components/code-block";
+import { ArrowRight, CheckCircle2, Code, FileText, Zap } from "lucide-react";
 
 export default function Home() {
   return (
@@ -12,10 +12,13 @@ export default function Home() {
           <div className="flex flex-col items-center text-center space-y-4">
             <div className="space-y-2">
               <h1 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl lg:text-6xl/none">
-                DocTalkie – <span className="gradient-text">Your AI Assistant,</span> <br /> Ready to help
+                DocTalkie –{" "}
+                <span className="gradient-text">Your AI Assistant,</span> <br />{" "}
+                Ready to help
               </h1>
               <p className="mx-auto max-w-[700px] text-muted-foreground md:text-xl">
-                Easily integrate an AI assistant into any React web app with just a few lines of code.
+                Easily integrate an AI assistant into any React web app with
+                just a few lines of code.
               </p>
             </div>
             <div className="flex flex-col sm:flex-row gap-4 mt-6">
@@ -38,16 +41,21 @@ export default function Home() {
         <div className="container px-4 md:px-6">
           <div className="grid gap-6 lg:grid-cols-2 lg:gap-12 items-center">
             <div className="space-y-4">
-              <div className="inline-block rounded-lg bg-secondary px-3 py-1 text-sm">Simple Integration</div>
+              <div className="inline-block rounded-lg bg-secondary px-3 py-1 text-sm">
+                Simple Integration
+              </div>
               <h2 className="text-3xl font-bold tracking-tighter md:text-4xl">
                 Add DocTalkie to your React app in minutes
               </h2>
               <p className="text-muted-foreground md:text-lg">
-                Just install our package and add a single component to your app. DocTalkie handles the rest.
+                Just install our package and add a single component to your app.
+                DocTalkie handles the rest.
               </p>
               <div className="space-y-2">
                 <CodeBlock code="npm install doctalkie-react" language="bash" />
-                <div className="text-center text-sm text-muted-foreground my-1">or</div>
+                <div className="text-center text-sm text-muted-foreground my-1">
+                  or
+                </div>
                 <CodeBlock code="yarn add doctalkie-react" language="bash" />
               </div>
             </div>
@@ -59,23 +67,30 @@ export default function Home() {
                     <div className="h-3 w-3 rounded-full bg-red-500 mr-2"></div>
                     <div className="h-3 w-3 rounded-full bg-yellow-500 mr-2"></div>
                     <div className="h-3 w-3 rounded-full bg-green-500"></div>
-                    <div className="ml-4 text-sm text-muted-foreground">MyApp.jsx</div>
+                    <div className="ml-4 text-sm text-muted-foreground">
+                      MyApp.jsx
+                    </div>
                   </div>
                   <div className="space-y-2 font-mono text-sm">
                     <div>
-                      <span className="text-doctalkie-400">import</span> <span className="text-foreground">React</span>{" "}
-                      <span className="text-doctalkie-400">from</span> <span className="text-foreground">'react'</span>;
+                      <span className="text-doctalkie-400">import</span>{" "}
+                      <span className="text-foreground">React</span>{" "}
+                      <span className="text-doctalkie-400">from</span>{" "}
+                      <span className="text-foreground">'react'</span>;
                     </div>
                     <div>
                       <span className="text-doctalkie-400">import</span>{" "}
-                      <span className="text-foreground">{"{ DocTalkieChat }"}</span>{" "}
+                      <span className="text-foreground">
+                        {"{ DocTalkieChat }"}
+                      </span>{" "}
                       <span className="text-doctalkie-400">from</span>{" "}
-                      <span className="text-foreground">'doctalkie-react'</span>;
+                      <span className="text-foreground">'doctalkie-react'</span>
+                      ;
                     </div>
                     <div></div>
                     <div>
-                      <span className="text-doctalkie-400">function</span> <span className="text-primary">App</span>(){" "}
-                      {"{"}
+                      <span className="text-doctalkie-400">function</span>{" "}
+                      <span className="text-primary">App</span>() {"{"}
                     </div>
                     <div className="pl-4">
                       <span className="text-doctalkie-400">return</span> (
@@ -83,8 +98,12 @@ export default function Home() {
                     <div className="pl-8">{"<div>"}</div>
                     <div className="pl-12">{"<h1>Welcome to My App</h1>"}</div>
                     <div className="pl-12 text-primary">{"<DocTalkieChat"}</div>
-                    <div className="pl-16 text-muted-foreground">apiURL="https://api.doctalkie.ai/my-project"</div>
-                    <div className="pl-16 text-muted-foreground">apiKey="dt_123456789abcdef"</div>
+                    <div className="pl-16 text-muted-foreground">
+                      apiURL="https://api.doctalkie.ai/my-project"
+                    </div>
+                    <div className="pl-16 text-muted-foreground">
+                      apiKey="dt_123456789abcdef"
+                    </div>
                     <div className="pl-12 text-primary">{"/>"}</div>
                     <div className="pl-8">{"</div>"}</div>
                     <div className="pl-4">);</div>
@@ -92,7 +111,8 @@ export default function Home() {
                     <div></div>
                     <div>
                       <span className="text-doctalkie-400">export</span>{" "}
-                      <span className="text-doctalkie-400">default</span> <span className="text-foreground">App</span>;
+                      <span className="text-doctalkie-400">default</span>{" "}
+                      <span className="text-foreground">App</span>;
                     </div>
                   </div>
                 </div>
@@ -105,9 +125,12 @@ export default function Home() {
       <section className="py-12 md:py-16">
         <div className="container px-4 md:px-6">
           <div className="text-center space-y-4 mb-12">
-            <h2 className="text-3xl font-bold tracking-tighter md:text-4xl">Why choose DocTalkie?</h2>
+            <h2 className="text-3xl font-bold tracking-tighter md:text-4xl">
+              Why choose DocTalkie?
+            </h2>
             <p className="mx-auto max-w-[700px] text-muted-foreground md:text-lg">
-              Our AI assistant is designed specifically for documentation and knowledge bases.
+              Our AI assistant is designed specifically for documentation and
+              knowledge bases.
             </p>
           </div>
           <div className="grid gap-8 md:grid-cols-3">
@@ -117,7 +140,8 @@ export default function Home() {
               </div>
               <h3 className="text-xl font-bold mb-2">Document-Trained</h3>
               <p className="text-muted-foreground">
-                Upload your documentation files and DocTalkie learns from them to provide accurate, contextual answers.
+                Upload your documentation files and DocTalkie learns from them
+                to provide accurate, contextual answers.
               </p>
             </div>
             <div className="bg-card border border-border/50 rounded-lg p-6 shadow-sm">
@@ -126,7 +150,8 @@ export default function Home() {
               </div>
               <h3 className="text-xl font-bold mb-2">Developer-Friendly</h3>
               <p className="text-muted-foreground">
-                Simple React component with customizable options. No complex setup or configuration required.
+                Simple React component with customizable options. No complex
+                setup or configuration required.
               </p>
             </div>
             <div className="bg-card border border-border/50 rounded-lg p-6 shadow-sm">
@@ -135,7 +160,8 @@ export default function Home() {
               </div>
               <h3 className="text-xl font-bold mb-2">Fast & Responsive</h3>
               <p className="text-muted-foreground">
-                Optimized for speed and performance. Get instant answers without slowing down your application.
+                Optimized for speed and performance. Get instant answers without
+                slowing down your application.
               </p>
             </div>
           </div>
@@ -154,7 +180,9 @@ export default function Home() {
                       <div className="h-3 w-3 rounded-full bg-red-500 mr-2"></div>
                       <div className="h-3 w-3 rounded-full bg-yellow-500 mr-2"></div>
                       <div className="h-3 w-3 rounded-full bg-green-500"></div>
-                      <div className="ml-4 text-sm text-muted-foreground">Dashboard</div>
+                      <div className="ml-4 text-sm text-muted-foreground">
+                        Dashboard
+                      </div>
                     </div>
                     <div className="flex-1 space-y-4">
                       <div className="h-8 bg-secondary/50 rounded w-1/2"></div>
@@ -174,13 +202,15 @@ export default function Home() {
               </div>
             </div>
             <div className="space-y-4 order-1 lg:order-2">
-              <div className="inline-block rounded-lg bg-secondary px-3 py-1 text-sm">Full Control</div>
+              <div className="inline-block rounded-lg bg-secondary px-3 py-1 text-sm">
+                Full Control
+              </div>
               <h2 className="text-3xl font-bold tracking-tighter md:text-4xl">
                 Customize your assistant to match your brand
               </h2>
               <p className="text-muted-foreground md:text-lg">
-                Change the name, appearance, and behavior of your assistant to create a seamless experience for your
-                users.
+                Change the name, appearance, and behavior of your assistant to
+                create a seamless experience for your users.
               </p>
               <ul className="space-y-2">
                 <li className="flex items-center gap-2">
@@ -216,9 +246,12 @@ export default function Home() {
         <div className="container px-4 md:px-6">
           <div className="flex flex-col items-center text-center space-y-4">
             <div className="space-y-2">
-              <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl">Ready to get started?</h2>
+              <h2 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl">
+                Ready to get started?
+              </h2>
               <p className="mx-auto max-w-[700px] text-muted-foreground md:text-xl">
-                Choose a plan that works for you and start integrating DocTalkie into your React app today.
+                Choose a plan that works for you and start integrating DocTalkie
+                into your React app today.
               </p>
             </div>
             <div className="flex flex-col sm:flex-row gap-4 mt-6">
@@ -237,7 +270,13 @@ export default function Home() {
         </div>
       </section>
 
-      <ChatWidget showArrow={true} />
+      <ChatWidget
+        apiURL="http://localhost:3000/api/chat"
+        apiKey="your_api_key_here"
+        accentColor="hsl(var(--primary))"
+        theme="dark"
+        position="bottom-right"
+      />
     </>
-  )
+  );
 }

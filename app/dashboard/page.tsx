@@ -2,7 +2,7 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import DashboardClient from "@/components/dashboard-client";
-import ChatWidget from "@/components/chat-widget";
+import ChatWidget from "@/components/doc-talkie-chat";
 
 export const dynamic = "force-dynamic";
 
@@ -118,7 +118,13 @@ export default async function DashboardPage() {
         profile={profileWithSubscription}
         initialBot={bot ?? null}
       />
-      <ChatWidget />
+      <ChatWidget
+        apiURL="http://localhost:3000/api/chat"
+        apiKey="your_api_key_here"
+        accentColor="hsl(var(--primary))"
+        theme="dark"
+        position="bottom-right"
+      />
     </>
   );
 }
