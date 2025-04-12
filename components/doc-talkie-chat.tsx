@@ -21,7 +21,7 @@ type Message = {
 interface DocTalkieChatProps {
   apiURL: string;
   apiKey: string;
-  theme?: "dark" | "light"; // Theme selection
+  theme?: "dark" | "light" | "doctalkie"; // Theme selection
   accentColor?: string; // Accent color override
   position?: "bottom-right" | "bottom-left";
   welcomeMessage?: string;
@@ -31,7 +31,7 @@ interface DocTalkieChatProps {
 export default function DocTalkieChat({
   apiURL,
   apiKey,
-  theme = "dark", // Default to dark theme
+  theme = "doctalkie", // Default to doctalkie theme
   accentColor, // Optional accent color
   position = "bottom-right",
   welcomeMessage = "Hi there! How can I help you today?",
@@ -162,11 +162,11 @@ export default function DocTalkieChat({
             // Стили темы для Card
             theme === "light"
               ? "bg-white border-neutral-200 text-black"
-              : "bg-neutral-950 border-neutral-800 text-white", // Dark theme (default)
+              : theme === "dark"
+              ? "bg-neutral-950 border-neutral-800 text-white" // Dark theme
+              : "bg-card border text-card-foreground", // Doctalkie theme (default)
             position === "bottom-right" ? "right-0" : "left-0"
           )}
-          // НЕ применяем accentStyle к окну чата
-          // style={} // Убираем инлайн стиль, если был
         >
           {/* Header */}
           <div
@@ -175,21 +175,35 @@ export default function DocTalkieChat({
               // Стили темы для Header
               theme === "light"
                 ? "bg-neutral-100 border-neutral-200"
-                : "bg-neutral-900 border-neutral-800"
+                : theme === "dark"
+                ? "bg-neutral-900 border-neutral-800"
+                : "bg-muted border-b" // Doctalkie theme
             )}
           >
             <div className="flex items-center">
-              {/* Индикатор активности - используем accentColor если задан, иначе (белый для dark / primary для light) */}
+              {/* Индикатор активности - используем accentColor если задан, иначе (белый для dark / primary для light и doctalkie) */}
               <div
                 className={cn(
                   "h-2 w-2 rounded-full mr-2 animate-pulse",
                   // Обновленное условие для фона по умолчанию
-                  !accentColor && (theme === "dark" ? "bg-white" : "bg-primary")
+                  !accentColor && (theme === "dark" ? "bg-white" : "bg-primary") // light & doctalkie use primary
                 )}
                 // Используем инлайн стиль ТОЛЬКО если accentColor задан
                 style={accentColor ? { backgroundColor: accentColor } : {}}
               />
-              <span className="font-medium">DocTalkie Assistant</span>
+              {/* Цвет текста заголовка */}
+              <span
+                className={cn(
+                  "font-medium",
+                  theme === "light"
+                    ? "text-black"
+                    : theme === "dark"
+                    ? "text-white"
+                    : "text-foreground" // Doctalkie theme
+                )}
+              >
+                DocTalkie Assistant
+              </span>
             </div>
             <Button
               variant="ghost"
@@ -200,7 +214,9 @@ export default function DocTalkieChat({
                 // Цвет иконки крестика в зависимости от темы
                 theme === "light"
                   ? "text-neutral-600 hover:text-neutral-900"
-                  : "text-neutral-400 hover:text-white"
+                  : theme === "dark"
+                  ? "text-neutral-400 hover:text-white"
+                  : "text-muted-foreground hover:text-foreground" // Doctalkie theme
               )}
             >
               <X className="h-4 w-4" />
@@ -221,11 +237,19 @@ export default function DocTalkieChat({
                       ? message.sender === "user"
                         ? "bg-neutral-900 text-white"
                         : "bg-neutral-200 text-neutral-900"
-                      : message.sender === "user"
-                      ? // Обновлено: Белый фон для юзера в темной теме без accentColor
-                        "bg-white text-black"
-                      : "bg-secondary text-secondary-foreground") // Ассистент остается secondary
-                  // ... цвет текста при заданном accentColor ...
+                      : theme === "dark"
+                      ? message.sender === "user"
+                        ? "bg-white text-black"
+                        : "bg-secondary text-secondary-foreground"
+                      : // Doctalkie theme uses primary/secondary
+                      message.sender === "user"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-secondary text-secondary-foreground"),
+                  // Цвет текста, если accentColor ЗАДАН
+                  accentColor &&
+                    (theme === "light"
+                      ? "text-neutral-900" // Предполагаем темный текст на светлом accentColor
+                      : "text-white") // Предполагаем белый текст на темном accentColor (для dark и doctalkie)
                 )}
                 // Применяем акцентный цвет фона ко ВСЕМ сообщениям, если accentColor задан
                 style={accentColor ? accentStyle : {}}
@@ -238,7 +262,9 @@ export default function DocTalkieChat({
                         // Цвет лоадера
                         theme === "light"
                           ? "text-neutral-500"
-                          : "text-neutral-400"
+                          : theme === "dark"
+                          ? "text-neutral-400"
+                          : "text-muted-foreground" // Doctalkie theme
                       )}
                     />
                   </div>
@@ -257,7 +283,9 @@ export default function DocTalkieChat({
               // Стили темы для Footer
               theme === "light"
                 ? "bg-white border-neutral-200"
-                : "bg-neutral-950 border-neutral-800"
+                : theme === "dark"
+                ? "bg-neutral-950 border-neutral-800"
+                : "bg-card border-t" // Doctalkie theme
             )}
           >
             <div className="flex items-end gap-2">
@@ -272,7 +300,9 @@ export default function DocTalkieChat({
                   // Стили темы для Textarea
                   theme === "light"
                     ? "bg-neutral-100 text-black placeholder:text-neutral-500 focus-visible:ring-black"
-                    : "bg-neutral-800 text-white placeholder:text-neutral-400 focus-visible:ring-white",
+                    : theme === "dark"
+                    ? "bg-neutral-800 text-white placeholder:text-neutral-400 focus-visible:ring-white"
+                    : "bg-muted text-foreground placeholder:text-muted-foreground focus-visible:ring-ring", // Doctalkie theme
                   // Стиль кольца фокуса с accentColor, если задан (перекрывает цвет темы)
                   accentColor &&
                     "focus-visible:ring-offset-0 focus-visible:ring-1"
@@ -297,8 +327,9 @@ export default function DocTalkieChat({
                     ? "text-white" // Предполагаем белый текст на accentColor
                     : theme === "light"
                     ? "bg-neutral-900 text-white hover:bg-neutral-700"
-                    : // Обновлено: Белый фон для кнопки Send в темной теме без accentColor
-                      "bg-white text-black hover:bg-neutral-200"
+                    : theme === "dark"
+                    ? "bg-white text-black hover:bg-neutral-200"
+                    : "bg-primary text-primary-foreground hover:bg-primary/90" // Doctalkie theme
                 )}
                 // Применяем accentColor к ФОНУ
                 style={accentStyle}
@@ -327,12 +358,19 @@ export default function DocTalkieChat({
             ? isOpen
               ? "bg-neutral-200 text-neutral-700 hover:bg-neutral-300"
               : "bg-neutral-900 text-white hover:bg-neutral-700"
-            : isOpen // Dark theme
-            ? "bg-secondary text-secondary-foreground hover:bg-secondary/80" // Открытый чат - secondary
-            : // Обновлено: Белый фон для закрытого чата в темной теме без accentColor
-              "bg-white text-black hover:bg-neutral-200", // Закрытый чат - белый
-          // Пульсация только в темной теме без accentColor и когда закрыто
-          !isOpen && !accentColor && theme === "dark" && "animate-pulse-glow"
+            : theme === "dark"
+            ? isOpen // Dark theme
+              ? "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+              : "bg-white text-black hover:bg-neutral-200"
+            : // Doctalkie theme
+            isOpen
+            ? "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+            : "bg-primary text-primary-foreground hover:bg-primary/90",
+          // Пульсация только в темной теме или doctalkie без accentColor и когда закрыто
+          !isOpen &&
+            !accentColor &&
+            (theme === "dark" || theme === "doctalkie") &&
+            "animate-pulse-glow"
         )}
         // Применяем accentColor к ФОНУ
         style={accentStyle}

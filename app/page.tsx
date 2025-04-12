@@ -274,7 +274,7 @@ export default function Home() {
         apiURL="http://localhost:3000/api/chat"
         apiKey="your_api_key_here"
         accentColor="hsl(var(--primary))"
-        theme="dark"
+        theme="doctalkie"
         position="bottom-right"
       />
     </>
