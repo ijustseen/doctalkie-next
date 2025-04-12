@@ -5,14 +5,16 @@ import type React from "react";
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { MessageCircle, X, Send, CornerDownLeft } from "lucide-react";
+import { MessageCircle, X, Send, CornerDownLeft, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import TextareaAutosize from "react-textarea-autosize";
 
 type Message = {
   id: string;
   content: string;
   sender: "user" | "assistant";
   timestamp: Date;
+  isLoading?: boolean;
 };
 
 export default function ChatWidget({
@@ -33,6 +35,7 @@ export default function ChatWidget({
     },
   ]);
   const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -40,48 +43,75 @@ export default function ChatWidget({
     setIsOpen(!isOpen);
   };
 
-  const handleSend = () => {
-    if (input.trim()) {
-      // Add user message
+  const handleSend = async () => {
+    if (input.trim() && !isLoading) {
+      const userMessageContent = input;
+      setInput("");
+
       const userMessage: Message = {
-        id: Date.now().toString(),
-        content: input,
+        id: crypto.randomUUID(),
+        content: userMessageContent,
         sender: "user",
         timestamp: new Date(),
       };
-      setMessages((prev) => [...prev, userMessage]);
-      setInput("");
+      const assistantPlaceholderId = crypto.randomUUID();
+      const assistantPlaceholder: Message = {
+        id: assistantPlaceholderId,
+        content: "",
+        sender: "assistant",
+        timestamp: new Date(),
+        isLoading: true,
+      };
+      setMessages((prev) => [...prev, userMessage, assistantPlaceholder]);
+      setIsLoading(true);
 
-      // Simulate assistant response
-      setTimeout(() => {
-        let response =
-          "I'm sorry, I don't have information about that in my documentation.";
+      try {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ query: userMessageContent }),
+        });
 
-        if (input.toLowerCase().includes("install")) {
-          response =
-            "You can install DocTalkie with: npm install doctalkie-react";
-        } else if (
-          input.toLowerCase().includes("pricing") ||
-          input.toLowerCase().includes("plan")
-        ) {
-          response =
-            "We offer Free, Pro, and Premium plans. Check our pricing page for details!";
-        } else if (
-          input.toLowerCase().includes("component") ||
-          input.toLowerCase().includes("use")
-        ) {
-          response =
-            "You can use DocTalkie by importing the component: import { DocTalkieChat } from 'doctalkie-react'";
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(
+            `API request failed: ${response.status} ${response.statusText} - ${
+              errorData?.error || "Unknown error"
+            }`
+          );
         }
 
-        const assistantMessage: Message = {
-          id: Date.now().toString(),
-          content: response,
-          sender: "assistant",
-          timestamp: new Date(),
-        };
-        setMessages((prev) => [...prev, assistantMessage]);
-      }, 1000);
+        const data = await response.json();
+        const assistantResponse =
+          data.answer || "Sorry, I couldn't get a response.";
+
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantPlaceholderId
+              ? { ...msg, content: assistantResponse, isLoading: false }
+              : msg
+          )
+        );
+      } catch (error) {
+        console.error("Error sending message:", error);
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.id === assistantPlaceholderId
+              ? {
+                  ...msg,
+                  content: `Error: ${
+                    error instanceof Error ? error.message : "Failed to fetch"
+                  }`,
+                  isLoading: false,
+                }
+              : msg
+          )
+        );
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -114,7 +144,7 @@ export default function ChatWidget({
       )}
 
       {isOpen && (
-        <Card className="absolute bottom-16 right-0 w-80 md:w-96 shadow-lg border border-border/50 overflow-hidden">
+        <Card className="absolute bottom-16 right-0 w-80 md:w-96 h-[500px] shadow-lg border border-border/50 overflow-hidden flex flex-col">
           <div className="flex items-center justify-between bg-secondary p-3 border-b border-border/50">
             <div className="flex items-center">
               <div className="h-2 w-2 rounded-full bg-primary mr-2 animate-pulse"></div>
@@ -130,7 +160,7 @@ export default function ChatWidget({
             </Button>
           </div>
 
-          <div className="h-80 overflow-y-auto p-3 flex flex-col gap-3">
+          <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
             {messages.map((message) => (
               <div
                 key={message.id}
@@ -138,10 +168,17 @@ export default function ChatWidget({
                   "max-w-[80%] rounded-lg p-3",
                   message.sender === "user"
                     ? "bg-primary text-primary-foreground ml-auto"
-                    : "bg-secondary text-secondary-foreground"
+                    : "bg-secondary text-secondary-foreground",
+                  "relative"
                 )}
               >
-                {message.content}
+                {message.isLoading ? (
+                  <div className="flex items-center justify-center h-full">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  </div>
+                ) : (
+                  message.content
+                )}
               </div>
             ))}
             <div ref={messagesEndRef} />
@@ -149,22 +186,28 @@ export default function ChatWidget({
 
           <div className="p-3 border-t border-border/50 bg-card">
             <div className="flex items-end gap-2">
-              <textarea
+              <TextareaAutosize
                 ref={inputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Type your message..."
-                className="flex-1 min-h-[40px] max-h-[120px] bg-secondary/50 border-0 rounded-md resize-none p-2 text-sm focus-visible:ring-1 focus-visible:ring-primary"
-                rows={1}
+                className="flex-1 max-h-[120px] bg-secondary/50 border-0 rounded-md resize-none p-2 text-sm focus-visible:ring-1 focus-visible:ring-primary"
+                minRows={1}
+                maxRows={4}
+                disabled={isLoading}
               />
               <Button
                 size="icon"
                 onClick={handleSend}
-                disabled={!input.trim()}
+                disabled={!input.trim() || isLoading}
                 className="h-10 w-10 shrink-0"
               >
-                <Send className="h-4 w-4" />
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
               </Button>
             </div>
           </div>
