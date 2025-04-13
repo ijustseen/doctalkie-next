@@ -54,8 +54,7 @@ type Bot = {
   name: string;
   strict_context: boolean;
   api_key: string;
-  api_url: string;
-  allowed_origins: string[] | null; // Added allowed_origins
+  allowed_origins: string[] | null;
 } | null;
 
 // Add Document type
@@ -634,7 +633,9 @@ export default function DashboardClient({
                       <div className="flex">
                         <Input
                           id="api-url"
-                          value={bot.api_url ?? "N/A"}
+                          value={`${
+                            process.env.NEXT_PUBLIC_BASE_URL || ""
+                          }/api/chat/${bot?.id ?? ""}`}
                           readOnly
                           className="rounded-r-none"
                         />
@@ -642,8 +643,14 @@ export default function DashboardClient({
                           variant="secondary"
                           size="icon"
                           className="rounded-l-none"
-                          onClick={() => copyToClipboard(bot.api_url)}
-                          disabled={!bot.api_url}
+                          onClick={() =>
+                            copyToClipboard(
+                              `${
+                                process.env.NEXT_PUBLIC_BASE_URL || ""
+                              }/api/chat/${bot?.id}`
+                            )
+                          }
+                          disabled={!bot?.id}
                         >
                           <Copy className="h-4 w-4" />
                         </Button>
@@ -955,8 +962,10 @@ export default function App() {
     <div>
       <h1>My Awesome App</h1>
       <DocTalkieChat 
-        apiURL="${bot?.api_url ?? "YOUR_API_URL"}" // Use actual API URL
-        apiKey="${bot?.api_key ?? "YOUR_API_KEY"}" // Use actual API Key
+        apiURL="${process.env.NEXT_PUBLIC_BASE_URL}/api/chat/${
+                    bot?.id ?? "{YOUR_BOT_ID}"
+                  }"
+        apiKey="${bot?.api_key ?? "{YOUR_API_KEY}"}"
         // Optional props...
       />
     </div>
@@ -967,6 +976,58 @@ export default function App() {
                 />
               </div>
               {/* ... rest of Quick Start ... */}
+            </CardContent>
+          </Card>
+
+          {/* Integration Examples Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Integrate Your Bot</CardTitle>
+              <CardDescription>
+                Use these snippets to integrate the chat widget.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Tabs defaultValue="javascript">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="javascript">JavaScript</TabsTrigger>
+                  <TabsTrigger value="react">React</TabsTrigger>
+                </TabsList>
+                <TabsContent value="javascript">
+                  <CodeBlock
+                    language="html"
+                    code={`<!-- Include this script tag in your HTML -->
+<script 
+  src="${process.env.NEXT_PUBLIC_BASE_URL || ""}/widget.js" 
+  data-api-url="${process.env.NEXT_PUBLIC_BASE_URL || ""}/api/chat/${
+                      bot?.id ?? "{YOUR_BOT_ID}"
+                    }" 
+  data-api-key="${bot?.api_key ?? "{YOUR_API_KEY}"}" 
+  defer
+></script>`}
+                  />
+                </TabsContent>
+                <TabsContent value="react">
+                  <CodeBlock
+                    language="jsx"
+                    code={`import DocTalkieChat from '@/components/doc-talkie-chat'; // Adjust import path
+
+function MyComponent() {
+  return (
+    <DocTalkieChat 
+      apiURL="${process.env.NEXT_PUBLIC_BASE_URL || ""}/api/chat/${
+                      bot?.id ?? "{YOUR_BOT_ID}"
+                    }"
+      apiKey="${bot?.api_key ?? "{YOUR_API_KEY}"}"
+      // Optional props
+      // theme="light" 
+      // accentColor="#007bff"
+    />
+  );
+}`}
+                  />
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
         </TabsContent>

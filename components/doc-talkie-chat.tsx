@@ -78,10 +78,12 @@ export default function DocTalkieChat({
       setIsLoading(true);
 
       try {
+        // Используем targetChatUrl вместо apiURL
         const response = await fetch(apiURL, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            // apiKey передается как и раньше
             Authorization: `Bearer ${apiKey}`,
           },
           body: JSON.stringify({ query: userMessageContent }),
