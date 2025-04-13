@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import ChatWidget from "@/components/doc-talkie-chat";
+import ChatWidget from "@/components/doc-talkie-chat/doc-talkie-chat";
 import CodeBlock from "@/components/code-block";
 import { ArrowRight, CheckCircle2, Code, FileText, Zap } from "lucide-react";
 

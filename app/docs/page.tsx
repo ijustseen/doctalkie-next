@@ -12,7 +12,7 @@ import {
   MessageCircle,
   Settings,
 } from "lucide-react";
-import DocTalkieChat from "@/components/doc-talkie-chat";
+import DocTalkieChat from "@/components/doc-talkie-chat/doc-talkie-chat";
 import { DocsSidebarNav } from "@/components/docs-sidebar-nav";
 
 export default function DocsPage() {

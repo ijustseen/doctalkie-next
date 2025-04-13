@@ -2,7 +2,7 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import DashboardClient from "@/components/dashboard-client";
-import ChatWidget from "@/components/doc-talkie-chat";
+import ChatWidget from "@/components/doc-talkie-chat/doc-talkie-chat";
 
 export const dynamic = "force-dynamic";
 

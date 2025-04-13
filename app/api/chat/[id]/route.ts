@@ -85,7 +85,7 @@ export async function POST(
   try {
     // 2. Проверка Assistant ID и API Key в базе данных Supabase
     const { data: assistant, error: assistantError } = await supabaseAdmin
-      .from("assistants")
+      .from("bots")
       .select("id, api_key")
       .eq("id", params.id)
       .single();

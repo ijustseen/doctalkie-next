@@ -7,15 +7,10 @@ import { Card } from "@/components/ui/card";
 import { MessageCircle, X, Send, CornerDownLeft, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import TextareaAutosize from "react-textarea-autosize";
+import { useDocTalkie, type Message } from "./use-doc-talkie";
 
 // Тип для сообщений чата
-type Message = {
-  id: string;
-  content: string;
-  sender: "user" | "assistant";
-  timestamp: Date;
-  isLoading?: boolean;
-};
+// type Message = { ... };
 
 // Интерфейс пропсов для компонента
 interface DocTalkieChatProps {
@@ -38,102 +33,38 @@ export default function DocTalkieChat({
   className,
 }: DocTalkieChatProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "initial-welcome",
-      content: welcomeMessage,
-      sender: "assistant",
-      timestamp: new Date(),
-    },
-  ]);
   const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  const { messages, isLoading, error, sendMessage } = useDocTalkie({
+    apiURL,
+    apiKey,
+    initialMessages: [
+      {
+        id: "initial-welcome",
+        content: welcomeMessage,
+        sender: "assistant",
+        timestamp: new Date(),
+      },
+    ],
+  });
 
   const toggleChat = () => {
     setIsOpen(!isOpen);
   };
 
-  const handleSend = async () => {
-    if (input.trim() && !isLoading) {
-      const userMessageContent = input;
+  const handleTriggerSend = () => {
+    if (input.trim()) {
+      sendMessage(input);
       setInput("");
-
-      const userMessage: Message = {
-        id: crypto.randomUUID(),
-        content: userMessageContent,
-        sender: "user",
-        timestamp: new Date(),
-      };
-      const assistantPlaceholderId = crypto.randomUUID();
-      const assistantPlaceholder: Message = {
-        id: assistantPlaceholderId,
-        content: "",
-        sender: "assistant",
-        timestamp: new Date(),
-        isLoading: true,
-      };
-      setMessages((prev) => [...prev, userMessage, assistantPlaceholder]);
-      setIsLoading(true);
-
-      try {
-        // Используем targetChatUrl вместо apiURL
-        const response = await fetch(apiURL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            // apiKey передается как и раньше
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({ query: userMessageContent }),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(
-            `API request failed: ${response.status} ${response.statusText} - ${
-              errorData?.error || "Unknown error"
-            }`
-          );
-        }
-
-        const data = await response.json();
-        const assistantResponse =
-          data.answer || "Sorry, I couldn't get a response.";
-
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === assistantPlaceholderId
-              ? { ...msg, content: assistantResponse, isLoading: false }
-              : msg
-          )
-        );
-      } catch (error) {
-        console.error("Error sending message:", error);
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === assistantPlaceholderId
-              ? {
-                  ...msg,
-                  content: `Error: ${
-                    error instanceof Error ? error.message : "Failed to fetch"
-                  }`,
-                  isLoading: false,
-                }
-              : msg
-          )
-        );
-      } finally {
-        setIsLoading(false);
-      }
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      handleTriggerSend();
     }
   };
 
@@ -227,6 +158,11 @@ export default function DocTalkieChat({
 
           {/* Область сообщений */}
           <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3">
+            {error && (
+              <div className="p-2 mb-2 text-xs text-center text-red-700 bg-red-100 rounded-md border border-red-300">
+                {error}
+              </div>
+            )}
             {messages.map((message) => (
               <div
                 key={message.id}
@@ -320,7 +256,7 @@ export default function DocTalkieChat({
               {/* Кнопка Send */}
               <Button
                 size="icon"
-                onClick={handleSend}
+                onClick={handleTriggerSend}
                 disabled={!input.trim() || isLoading}
                 className={cn(
                   "h-10 w-10 shrink-0",
