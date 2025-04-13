@@ -215,7 +215,7 @@ export default function Home() {
               <ul className="space-y-2">
                 <li className="flex items-center gap-2">
                   <CheckCircle2 className="h-5 w-5 text-primary" />
-                  <span>Customize assistant name and avatar</span>
+                  <span>Customize assistant name</span>
                 </li>
                 <li className="flex items-center gap-2">
                   <CheckCircle2 className="h-5 w-5 text-primary" />

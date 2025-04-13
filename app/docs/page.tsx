@@ -207,13 +207,23 @@ export default function App() {
                         <tbody className="divide-y divide-border">
                           <tr>
                             <td className="p-3 font-mono text-primary">
-                              color
+                              accentColor
                             </td>
                             <td className="p-3 text-muted-foreground">
                               Custom accent color
                             </td>
                             <td className="p-3 font-mono text-sm">string</td>
                             <td className="p-3 font-mono text-sm">"#00e6e6"</td>
+                          </tr>
+                          <tr>
+                            <td className="p-3 font-mono text-primary">
+                              theme
+                            </td>
+                            <td className="p-3 text-muted-foreground">
+                              Theme of your app (dark or light)
+                            </td>
+                            <td className="p-3 font-mono text-sm">string</td>
+                            <td className="p-3 font-mono text-sm">"dark"</td>
                           </tr>
                           <tr>
                             <td className="p-3 font-mono text-primary">
@@ -229,18 +239,6 @@ export default function App() {
                           </tr>
                           <tr>
                             <td className="p-3 font-mono text-primary">
-                              assistantName
-                            </td>
-                            <td className="p-3 text-muted-foreground">
-                              Custom name for the assistant
-                            </td>
-                            <td className="p-3 font-mono text-sm">string</td>
-                            <td className="p-3 font-mono text-sm">
-                              "DocTalkie"
-                            </td>
-                          </tr>
-                          <tr>
-                            <td className="p-3 font-mono text-primary">
                               welcomeMessage
                             </td>
                             <td className="p-3 text-muted-foreground">
@@ -249,18 +247,6 @@ export default function App() {
                             <td className="p-3 font-mono text-sm">string</td>
                             <td className="p-3 font-mono text-sm">
                               "Hi there! How can I help?"
-                            </td>
-                          </tr>
-                          <tr>
-                            <td className="p-3 font-mono text-primary">
-                              placeholder
-                            </td>
-                            <td className="p-3 text-muted-foreground">
-                              Custom placeholder text for the input field
-                            </td>
-                            <td className="p-3 font-mono text-sm">string</td>
-                            <td className="p-3 font-mono text-sm">
-                              "Type your message..."
                             </td>
                           </tr>
                         </tbody>
@@ -273,14 +259,12 @@ export default function App() {
                       Example with all props
                     </h3>
                     <CodeBlock
-                      code={`<DocTalkieChat 
-  apiURL="https://api.doctalkie.ai/projects/your-project" 
+                      code={`<DocTalkieChat
+  apiURL="http://localhost:3000/api/chat/your-api-url"
   apiKey="your-api-key"
-  color="#00e6e6"
+  accentColor="#ffffff"
+  theme="dark"
   position="bottom-right"
-  assistantName="Support Bot"
-  welcomeMessage="Hello! How can I help you today?"
-  placeholder="Ask me anything about our docs..."
 />`}
                       language="jsx"
                     />
