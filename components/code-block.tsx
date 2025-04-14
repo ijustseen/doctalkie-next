@@ -12,48 +12,49 @@ import type React from "react";
 // Create custom theme by overriding atomOneDark
 const myCustomTheme = {
   ...atomOneDark,
-  // Override general background and text color
+  // Override general background and text color using CSS variables
   hljs: {
     ...atomOneDark["hljs"],
-    background: "hsl(var(--background))", // Use card background
-    color: "hsl(var(--card-foreground))", // Use card foreground
+    background: "hsl(var(--background))", // Use theme background variable
+    color: "hsl(var(--card-foreground))", // Use theme foreground variable
+    // padding: "1rem", // Padding is handled by customStyle
   },
   // Override specific token colors
   "hljs-keyword": {
     // Keywords like import, export, const, function, return
     ...atomOneDark["hljs-keyword"],
-    color: "hsl(var(--primary))",
+    color: "hsl(var(--primary))", // Use theme primary color
   },
   "hljs-tag .hljs-name": {
     // HTML/JSX tag names like div, Button
     ...atomOneDark["hljs-tag .hljs-name"],
-    color: "hsl(var(--primary))",
+    color: "hsl(var(--primary))", // Use theme primary color
   },
   "hljs-attr": {
     // HTML/JSX attributes like className, onClick
     ...atomOneDark["hljs-attr"],
-    color: "#d19a66", // Keep orange/yellow
+    color: "#d19a66", // Keep specific color (Orange/Yellow)
   },
   "hljs-string": {
     // String literals
     ...atomOneDark["hljs-string"],
-    color: "#98c379", // Keep green
+    color: "#98c379", // Keep specific color (Green)
   },
   "hljs-comment": {
     // Comments
     ...atomOneDark["hljs-comment"],
-    color: "hsl(var(--muted-foreground))",
+    color: "hsl(var(--muted-foreground))", // Use theme muted color
     fontStyle: "italic",
   },
   "hljs-number": {
     // Numbers
     ...atomOneDark["hljs-number"],
-    color: "#d19a66", // Keep orange/yellow
+    color: "#d19a66", // Keep specific color (Orange/Yellow)
   },
   "hljs-function .hljs-title": {
     // Function names
     ...atomOneDark["hljs-function .hljs-title"],
-    color: "#61afef", // Keep blue
+    color: "#61afef", // Keep specific color (Blue)
   },
   // Add more overrides here if needed
 };
@@ -79,13 +80,12 @@ export default function CodeBlock({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // customStyle now only handles layout/non-theme specific styles
+  // customStyle now handles only layout/non-theme specific styles
   const customStyle: React.CSSProperties = {
-    padding: "1rem",
+    padding: "1rem", // Padding defined here
     margin: "0",
     overflow: "auto",
-    // background is now handled by the theme (myCustomTheme.hljs.background)
-    borderRadius: "inherit",
+    borderRadius: "inherit", // Наследует скругление от родителя
     fontSize: "0.875rem",
   };
 
