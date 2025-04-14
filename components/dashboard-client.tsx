@@ -94,7 +94,7 @@ export default function DashboardClient({
   // State for file upload
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // State for documents list
@@ -286,70 +286,57 @@ export default function DashboardClient({
   };
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      setSelectedFile(file);
-      // TODO: Add validation (size, type) based on subscription
+    if (event.target.files && event.target.files[0]) {
+      setSelectedFile(event.target.files[0]);
+      setUploadError(null);
     }
   };
 
   const handleFileUpload = async () => {
-    if (!selectedFile || !bot || !user) return;
-
-    setIsUploading(true);
-    setUploadProgress(0);
-    setDragActive(false); // Reset drag state on upload start
-
-    const storagePath = `${user.id}/${bot.id}/${Date.now()}_${
-      selectedFile.name
-    }`; // Unique path
-
-    const { error: uploadError } = await supabase.storage
-      .from("documents")
-      .upload(storagePath, selectedFile, {
-        cacheControl: "3600",
-        upsert: false, // Don't overwrite existing files with the same name (use unique path instead)
-        contentType: selectedFile.type,
-      });
-
-    if (uploadError) {
-      console.error("Error uploading file:", uploadError);
-      setIsUploading(false);
-      // Add error toast
+    if (!selectedFile || !bot) {
+      setUploadError("Please select a file and ensure a bot is active.");
       return;
     }
 
-    console.log("File uploaded successfully, path:", storagePath);
-    setUploadProgress(100); // Mark as complete
+    setIsUploading(true);
+    setUploadError(null);
 
-    // Insert record into public.documents table
-    const { error: dbError } = await supabase.from("documents").insert({
-      bot_id: bot.id,
-      file_name: selectedFile.name,
-      storage_path: storagePath,
-      file_size_bytes: selectedFile.size,
-      status: "uploaded", // Initial status
-    });
+    const formData = new FormData();
+    formData.append("file", selectedFile);
 
-    if (dbError) {
-      console.error("Error creating document record:", dbError);
-      // Add error toast
-      // Potentially try to delete the uploaded file from storage if DB insert fails
-      await supabase.storage.from("documents").remove([storagePath]);
-      console.warn("Uploaded file removed due to DB error", storagePath);
-    } else {
-      console.log("Document record created");
-      // Refresh the document list
-      await fetchDocuments();
-      setSelectedFile(null); // Clear selection
+    try {
+      const response = await fetch(
+        `/api/assistants/${bot.id}/documents/process`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          result.error || `Upload failed with status: ${response.status}`
+        );
+      }
+
+      console.log("File processed successfully:", result);
+      setSelectedFile(null);
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
-      // Add success toast
+      fetchDocuments();
+    } catch (error) {
+      console.error("Error uploading file:", error);
+      const message =
+        error instanceof Error
+          ? error.message
+          : "An unknown error occurred during upload.";
+      setUploadError(`Upload failed: ${message}`);
+    } finally {
+      setIsUploading(false);
     }
-
-    setIsUploading(false);
-    setUploadProgress(0);
   };
 
   const handleDeleteDocument = async (doc: Document) => {
@@ -839,81 +826,73 @@ export default function DashboardClient({
                       </ScrollArea>
                     </div>
 
-                    {/* Upload Area with Drag-n-Drop styling */}
-                    <div
-                      className={cn(
-                        "relative border-2 border-dashed border-border rounded-lg p-8 text-center transition-colors duration-200 ease-in-out",
-                        dragActive
-                          ? "border-primary bg-primary/10"
-                          : "bg-transparent"
-                      )}
-                      onDragEnter={handleDrag}
-                      onDragLeave={handleDrag}
-                      onDragOver={handleDrag}
-                      onDrop={handleDrop}
-                    >
-                      <Upload className="h-9 w-9 text-primary mx-auto mb-4" />
-                      <h3 className="text-lg font-semibold mb-2">
-                        Upload New Document
-                      </h3>
-                      <p className="text-sm text-muted-foreground mb-4">
-                        Drag & drop files here or click below
-                      </p>
-                      <p className="text-xs text-muted-foreground mb-5">
-                        Max Size:{" "}
-                        {profile?.subscriptions?.max_total_doc_size_mb ?? 0}MB (
-                        {subscriptionName} plan)
-                      </p>
-
-                      {/* Button to trigger file input */}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => fileInputRef.current?.click()}
-                        className="mb-4"
-                        disabled={isUploading}
-                      >
-                        Choose File
-                      </Button>
-                      {/* Hidden file input */}
-                      <Input
-                        id="file-upload-input"
+                    {/* Upload Area */}
+                    <div className="border-2 border-dashed border-muted rounded-lg p-6 text-center">
+                      <input
                         type="file"
                         ref={fileInputRef}
                         onChange={handleFileSelect}
-                        className="hidden"
-                        // accept=".pdf,.md,.txt,.html"
+                        accept=".pdf,.docx,.txt" // Ограничиваем типы файлов
+                        className="hidden" // Скрываем стандартный инпут
+                        id="file-upload"
                       />
-
+                      {/* Показываем кнопку выбора, если файл не выбран */}
+                      {!selectedFile && (
+                        <Button
+                          variant="outline"
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          <Upload className="mr-2 h-4 w-4" /> Select File
+                        </Button>
+                      )}
+                      {/* Показываем информацию о файле и кнопки управления, если файл выбран */}
                       {selectedFile && (
-                        <div className="mt-4 text-sm">
-                          <p className="text-muted-foreground mb-2">
-                            Selected:{" "}
-                            <span className="font-medium text-foreground">
-                              {selectedFile.name}
-                            </span>{" "}
-                            ({formatBytes(selectedFile.size)})
+                        <div className="mt-4 text-sm text-muted-foreground flex flex-col items-center gap-2">
+                          <p>
+                            {selectedFile.name} (
+                            {(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
                           </p>
-                          {isUploading && (
-                            <Progress
-                              value={uploadProgress}
-                              className="w-full h-2 mb-3 max-w-sm mx-auto"
-                            />
-                          )}
-                          <Button
-                            onClick={handleFileUpload}
-                            disabled={!selectedFile || isUploading}
-                            size="sm"
-                          >
-                            {isUploading ? (
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            ) : (
-                              <Upload className="mr-2 h-4 w-4" />
-                            )}
-                            {isUploading ? "Uploading... 0%" : "Upload File"}
-                          </Button>
+                          <div className="flex gap-2 mt-2">
+                            <Button
+                              onClick={handleFileUpload}
+                              disabled={isUploading}
+                            >
+                              {isUploading ? (
+                                <>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />{" "}
+                                  Uploading...
+                                </>
+                              ) : (
+                                <Upload className="mr-2 h-4 w-4" /> +
+                                "Confirm Upload"
+                              )}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedFile(null);
+                                if (fileInputRef.current)
+                                  fileInputRef.current.value = "";
+                              }}
+                              disabled={isUploading}
+                            >
+                              Cancel
+                            </Button>
+                          </div>
                         </div>
                       )}
+                      {/* Показываем ошибку загрузки, если она есть */}
+                      {uploadError && (
+                        <p className="mt-4 text-sm text-red-600">
+                          {uploadError}
+                        </p>
+                      )}
+                      {/* Информация о поддерживаемых форматах */}
+                      <p className="mt-4 text-xs text-muted-foreground">
+                        Supported formats: PDF, DOCX, TXT. Max size: 10MB
+                        (example).
+                      </p>
                     </div>
                   </CardContent>
                 </Card>

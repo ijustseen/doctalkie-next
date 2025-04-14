@@ -1,72 +1,237 @@
 import { NextRequest, NextResponse } from "next/server";
 import Groq from "groq-sdk";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-// --- Конфигурация Groq ---
-const GROQ_LLM_MODEL_NAME = "llama3-8b-8192"; // Пример (Llama 3 8B)
+// --- Конфигурация ---
 const groqApiKey = process.env.GROQ_API_KEY;
-
-// --- Конфигурация Supabase ---
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY; // ВАЖНО: Используйте Service Key для бэкенда
-// --- Конец Конфигурации Supabase ---
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const groqModelName = process.env.GROQ_LLM_MODEL_NAME || "llama3-8b-8192"; // Используем переменную окружения
 
+// Примерный лимит символов (лучше настроить точнее или обрабатывать ошибку токенов от LLM)
+const MAX_CONTEXT_LENGTH = 25000;
+// --- Конец Конфигурации ---
+
+// --- Инициализация Клиентов ---
 let groq: Groq | null = null;
 if (groqApiKey) {
   groq = new Groq({ apiKey: groqApiKey });
 } else {
-  console.error("GROQ_API_KEY is not set in environment variables.");
+  console.error("GROQ_API_KEY is not set.");
 }
 
-// --- Инициализация Supabase Admin Client ---
-let supabaseAdmin: ReturnType<typeof createClient> | null = null;
+// ДОБАВЛЯЕМ ЛОГИ ПЕРЕМЕННЫХ
+console.log(
+  "DEBUG: NEXT_PUBLIC_SUPABASE_URL:",
+  process.env.NEXT_PUBLIC_SUPABASE_URL
+);
+console.log(
+  "DEBUG: SUPABASE_SERVICE_ROLE_KEY available:",
+  !!process.env.SUPABASE_SERVICE_ROLE_KEY
+); // Логируем только наличие ключа, не сам ключ
+
+let supabaseAdmin: SupabaseClient | null = null;
 if (supabaseUrl && supabaseServiceKey) {
   supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 } else {
-  console.error(
-    "Supabase URL or Service Key is missing in environment variables."
-  );
+  console.error("Supabase URL or Service Role Key is missing.");
 }
-// --- Конец Инициализации Supabase ---
+// --- Конец Инициализации Клиентов ---
 
+// --- Вспомогательные Функции ---
+
+// Аутентификация и получение данных ассистента
+async function authenticateAndGetAssistant(id: string, apiKey: string) {
+  if (!supabaseAdmin) throw new Error("Supabase client not initialized");
+
+  const { data: assistant, error } = await supabaseAdmin
+    .from("bots")
+    .select("id, api_key, strict_context")
+    .eq("id", id)
+    .single();
+
+  if (error) {
+    console.error(`Supabase error fetching assistant ${id}:`, error);
+    throw new NextResponse(
+      JSON.stringify({ error: "Assistant not found or database error" }),
+      { status: 404, headers: { "Content-Type": "application/json" } }
+    );
+  }
+  if (!assistant) {
+    // Эта ветка почти невозможна с .single(), но оставляем для полноты
+    console.warn(`Assistant not found for ID: ${id}`);
+    throw new NextResponse(JSON.stringify({ error: "Assistant not found" }), {
+      status: 404,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  // ВАЖНО: Простое сравнение ключей. Рассмотрите хеширование.
+  if (assistant.api_key !== apiKey) {
+    console.warn(`Invalid API Key attempt for assistant: ${id}`);
+    throw new NextResponse(JSON.stringify({ error: "Invalid API Key" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  return assistant;
+}
+
+// Получение полного текстового контекста
+async function fetchFullDocumentContext(assistantId: string): Promise<string> {
+  if (!supabaseAdmin) throw new Error("Supabase client not initialized");
+
+  console.log(`Fetching all document content for assistant ${assistantId}...`);
+  const { data: chunks, error } = await supabaseAdmin
+    .from("document_chunks")
+    .select("content")
+    .eq("bot_id", assistantId);
+
+  if (error) {
+    console.error(
+      `Supabase error fetching chunks for assistant ${assistantId}:`,
+      error
+    );
+    throw new Error("Failed to retrieve knowledge base from database.");
+  }
+
+  if (!chunks) {
+    console.warn(`No document chunks found for assistant ${assistantId}`);
+    return ""; // Возвращаем пустую строку, если чанков нет
+  }
+
+  const fullContext = chunks.map((chunk) => chunk.content).join("\n\n");
+  console.log(
+    `Total context length for assistant ${assistantId}: ${fullContext.length} characters`
+  );
+  return fullContext;
+}
+
+// Генерация промпта для LLM
+function generateLlmPrompt(
+  query: string,
+  context: string,
+  isStrict: boolean
+): string {
+  const contextForLlm =
+    context.length > 0 ? context : "No specific context provided.";
+  let prompt = "";
+
+  if (isStrict) {
+    prompt = `
+        Based **only** on the context provided below, answer the user's question.
+        Do not use any external knowledge or assumptions.
+        If the provided context does not contain the information needed to answer the question, state clearly that the answer cannot be found in the provided documentation.
+        
+        Context:
+        ---
+        ${contextForLlm}
+        ---
+
+        User Question: ${query}
+
+        --- 
+        Final Answer (MUST be in the same language as the User Question):
+      `;
+  } else {
+    prompt = `
+        Answer the user's question. Use the provided context below to help answer the question if it's relevant. If the context is not helpful or doesn't contain the answer, use your general knowledge but indicate if you are doing so.
+
+        Context:
+        ---
+        ${contextForLlm}
+        ---
+
+        User Question: ${query}
+
+        --- 
+        Final Answer (MUST be in the same language as the User Question):
+      `;
+  }
+  return prompt;
+}
+
+// Вызов Groq API
+async function callGroqApi(
+  prompt: string,
+  userQueryLanguage: string = "the user's original language"
+): Promise<string> {
+  if (!groq) throw new Error("Groq client not initialized");
+
+  // Определяем системное сообщение на основе предполагаемого языка пользователя
+  // Простая эвристика - можно улучшить при необходимости
+  const systemMessageContent = `You are a helpful assistant. Your response MUST be in ${userQueryLanguage}.`;
+
+  console.log("Calling Groq LLM with System Prompt:", systemMessageContent);
+  try {
+    const chatCompletion = await groq.chat.completions.create({
+      messages: [
+        {
+          role: "system",
+          content: systemMessageContent, // Системное сообщение о языке
+        },
+        {
+          role: "user",
+          content: prompt, // Основной промпт пользователя
+        },
+      ],
+      model: groqModelName,
+      temperature: 0.7,
+      max_tokens: 1024,
+      top_p: 1,
+      stream: false,
+    });
+
+    // --- ЛОГИРОВАНИЕ ОТВЕТА GROQ ---
+    console.log("Groq API Response:", JSON.stringify(chatCompletion, null, 2));
+    // --- КОНЕЦ ЛОГИРОВАНИЯ ---
+
+    const answer =
+      chatCompletion.choices[0]?.message?.content ||
+      "Sorry, I could not generate a response.";
+    return answer;
+  } catch (groqError) {
+    console.error("Error calling Groq API:", groqError);
+    const message =
+      groqError instanceof Error ? groqError.message : "Unknown Groq API error";
+    // Включаем исходное сообщение об ошибке для лучшей диагностики
+    throw new Error(`LLM processing failed: ${message}`);
+  }
+}
+
+// --- Основной Обработчик POST ---
 export async function POST(
   req: NextRequest,
   { params }: { params: { id: string } }
 ) {
-  // Проверка инициализации клиентов
-  if (!groq) {
-    return NextResponse.json(
-      { error: "Groq API key not configured correctly on the server." },
-      { status: 500 }
+  // 1. Проверка инициализации клиентов
+  if (!groq || !supabaseAdmin) {
+    console.error(
+      "Server configuration error: Groq or Supabase client not initialized."
     );
-  }
-  if (!supabaseAdmin) {
     return NextResponse.json(
-      { error: "Supabase client not configured correctly on the server." },
-      { status: 500 }
+      {
+        error:
+          "Server configuration error. Please check API keys or DB connection.",
+      },
+      { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }
 
-  // Извлечение данных из запроса
+  // 2. Извлечение и валидация данных запроса
+  const assistantId = params?.id;
   const authHeader = req.headers.get("Authorization");
   let query: string | undefined;
 
-  try {
-    const body = await req.json();
-    query = body.query;
-  } catch (e) {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
-  }
-
-  // 1. Валидация входных данных (ID, API Key, Query)
-  if (!params || !params.id) {
-    console.error("Assistant ID not found in route parameters.");
+  // Проверка assistantId
+  if (!assistantId) {
     return NextResponse.json(
       { error: "Assistant ID is missing" },
       { status: 400 }
     );
   }
-
+  // Проверка Authorization Header
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return NextResponse.json(
       { error: "Authorization header is missing or invalid" },
@@ -75,85 +240,79 @@ export async function POST(
   }
   const apiKey = authHeader.split(" ")[1];
 
-  if (!query) {
-    return NextResponse.json(
-      { error: "Query parameter is required" },
-      { status: 400 }
-    );
+  // Парсинг и проверка query
+  try {
+    const body = await req.json();
+    query = body.query;
+    if (!query) {
+      return NextResponse.json(
+        { error: "Query parameter is required" },
+        { status: 400 }
+      );
+    }
+  } catch (e) {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
+  // 3. Основная логика обработки
   try {
-    // 2. Проверка Assistant ID и API Key в базе данных Supabase
-    const { data: assistant, error: assistantError } = await supabaseAdmin
-      .from("bots")
-      .select("id, api_key")
-      .eq("id", params.id)
-      .single();
+    // Шаг 3.1: Аутентификация
+    const assistant = await authenticateAndGetAssistant(assistantId, apiKey);
 
-    if (assistantError || !assistant) {
-      console.error(
-        `Error fetching assistant or assistant not found for ID: ${params.id}:`,
-        assistantError?.message || "Not Found"
+    // Шаг 3.2: Получение контекста (ВНИМАНИЕ: неэффективно!)
+    const fullContext = await fetchFullDocumentContext(assistantId);
+
+    // Шаг 3.3: Проверка длины контекста
+    if (fullContext.length > MAX_CONTEXT_LENGTH) {
+      console.warn(
+        `Context length (${fullContext.length}) exceeds limit (${MAX_CONTEXT_LENGTH}) for assistant ${assistantId}`
       );
       return NextResponse.json(
-        { error: "Assistant not found or invalid ID" },
-        { status: 404 }
+        {
+          error: `Knowledge base is too large (${fullContext.length} chars). Limit is ${MAX_CONTEXT_LENGTH}. Consider using embeddings.`,
+        },
+        { status: 413 }
       );
     }
 
-    // Сравнение API ключей
-    if (assistant.api_key !== apiKey) {
-      console.warn(`Invalid API Key attempt for assistant: ${params.id}`);
-      return NextResponse.json({ error: "Invalid API Key" }, { status: 401 });
-    }
+    // Шаг 3.4: Генерация промпта
+    const prompt = generateLlmPrompt(
+      query,
+      fullContext,
+      assistant.strict_context ?? false
+    );
 
-    // --- Проверка ассистента и ключа пройдена ---
+    // Шаг 3.5: Вызов LLM
+    const answer = await callGroqApi(prompt, "Russian");
 
-    // 3. Формируем промпт для LLM (без контекста)
-    const prompt = `
-      Answer the user's question below. Use the language of the question.
-
-      User Question: ${query}
-
-      Answer:
-    `;
-
-    // 4. Отправляем запрос в Groq
-    console.log(`Calling Groq LLM for assistant ${params.id}...`);
-    const chatCompletion = await groq.chat.completions.create({
-      messages: [{ role: "user", content: prompt }],
-      model: GROQ_LLM_MODEL_NAME,
-      temperature: 0.7,
-      max_tokens: 1024,
-      top_p: 1,
-      stream: false,
-    });
-
-    // 5. Извлекаем ответ
-    const answer =
-      chatCompletion.choices[0]?.message?.content ||
-      "Sorry, I could not generate a response.";
-
-    // 6. Возвращаем ответ клиенту
-    return NextResponse.json({ answer: answer });
+    // Шаг 3.6: Успешный ответ
+    return NextResponse.json({ answer });
   } catch (error) {
-    // Обработка ошибок Supabase или Groq
-    console.error(
-      `Error processing request for assistant ${params.id}:`,
-      error
-    );
-    const errorMessage =
-      error instanceof Error ? error.message : "An unknown error occurred";
-    // Не возвращаем детали внутренней ошибки клиенту в продакшене
-    return NextResponse.json(
-      { error: `Failed to process chat request` },
-      { status: 500 }
-    );
+    // Обработка ошибок
+    if (error instanceof NextResponse) {
+      // Перехватываем ошибки 401, 404, 413, отправленные из вспомогательных функций
+      return error;
+    } else {
+      // Обработка внутренних ошибок 500 (ошибки БД при чтении чанков, ошибки Groq и т.д.)
+      console.error(
+        `Internal Server Error processing request for assistant ${assistantId}:`,
+        error instanceof Error ? error.message : error
+      );
+      return NextResponse.json(
+        {
+          error:
+            "Failed to process chat request due to an internal server error.",
+        },
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
+    }
   }
 }
 
+// --- GET Handler ---
 export async function GET(req: NextRequest) {
   return NextResponse.json({
-    message: "Chat API (Groq + Supabase Auth) is running. Use POST method.",
+    message:
+      "Chat API (Groq + Supabase Auth, Full Context) is running. Use POST method.",
   });
 }
