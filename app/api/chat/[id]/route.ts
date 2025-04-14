@@ -20,16 +20,6 @@ if (groqApiKey) {
   console.error("GROQ_API_KEY is not set.");
 }
 
-// ДОБАВЛЯЕМ ЛОГИ ПЕРЕМЕННЫХ
-console.log(
-  "DEBUG: NEXT_PUBLIC_SUPABASE_URL:",
-  process.env.NEXT_PUBLIC_SUPABASE_URL
-);
-console.log(
-  "DEBUG: SUPABASE_SERVICE_ROLE_KEY available:",
-  !!process.env.SUPABASE_SERVICE_ROLE_KEY
-); // Логируем только наличие ключа, не сам ключ
-
 let supabaseAdmin: SupabaseClient | null = null;
 if (supabaseUrl && supabaseServiceKey) {
   supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
@@ -132,7 +122,7 @@ function generateLlmPrompt(
         User Question: ${query}
 
         --- 
-        Final Answer (MUST be in the same language as the User Question):
+        Answer:
       `;
   } else {
     prompt = `
@@ -143,37 +133,35 @@ function generateLlmPrompt(
         ${contextForLlm}
         ---
 
-        User Question: ${query}
+      User Question: ${query}
 
         --- 
-        Final Answer (MUST be in the same language as the User Question):
-      `;
+      Answer:
+    `;
   }
   return prompt;
 }
 
 // Вызов Groq API
-async function callGroqApi(
-  prompt: string,
-  userQueryLanguage: string = "the user's original language"
-): Promise<string> {
+async function callGroqApi(prompt: string): Promise<string> {
   if (!groq) throw new Error("Groq client not initialized");
 
-  // Определяем системное сообщение на основе предполагаемого языка пользователя
-  // Простая эвристика - можно улучшить при необходимости
-  const systemMessageContent = `You are a helpful assistant. Your response MUST be in ${userQueryLanguage}.`;
+  // Обновленный системный промпт: язык ответа + формат кода с указанием языка
+  const systemMessageContent = `You are a helpful assistant. Your response MUST be strictly in the same language as the user\'s original question/query. When providing code snippets, always enclose them in triple backticks, specifying the language after the opening backticks (e.g., \\\`\\\`\\\`javascript).`;
 
-  console.log("Calling Groq LLM with System Prompt:", systemMessageContent);
+  console.log(
+    "Calling Groq LLM with System Prompt... (Language: strictly same as user query, Code format: ```language)"
+  );
   try {
     const chatCompletion = await groq.chat.completions.create({
       messages: [
         {
           role: "system",
-          content: systemMessageContent, // Системное сообщение о языке
+          content: systemMessageContent,
         },
         {
           role: "user",
-          content: prompt, // Основной промпт пользователя
+          content: prompt,
         },
       ],
       model: groqModelName,
@@ -183,8 +171,8 @@ async function callGroqApi(
       stream: false,
     });
 
-    // --- ЛОГИРОВАНИЕ ОТВЕТА GROQ ---
-    console.log("Groq API Response:", JSON.stringify(chatCompletion, null, 2));
+    // --- ЛОГИРОВАНИЕ ОТВЕТА GROQ (можно удалить, если больше не нужно) ---
+    // console.log("Groq API Response:", JSON.stringify(chatCompletion, null, 2));
     // --- КОНЕЦ ЛОГИРОВАНИЯ ---
 
     const answer =
@@ -195,7 +183,6 @@ async function callGroqApi(
     console.error("Error calling Groq API:", groqError);
     const message =
       groqError instanceof Error ? groqError.message : "Unknown Groq API error";
-    // Включаем исходное сообщение об ошибке для лучшей диагностики
     throw new Error(`LLM processing failed: ${message}`);
   }
 }
@@ -283,7 +270,7 @@ export async function POST(
     );
 
     // Шаг 3.5: Вызов LLM
-    const answer = await callGroqApi(prompt, "Russian");
+    const answer = await callGroqApi(prompt);
 
     // Шаг 3.6: Успешный ответ
     return NextResponse.json({ answer });

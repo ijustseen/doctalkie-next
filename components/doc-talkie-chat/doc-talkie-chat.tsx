@@ -7,6 +7,8 @@ import { Card } from "@/components/ui/card";
 import { MessageCircle, X, Send, CornerDownLeft, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import TextareaAutosize from "react-textarea-autosize";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useDocTalkie, type Message } from "./use-doc-talkie";
 
 // Тип для сообщений чата
@@ -194,46 +196,72 @@ export default function DocTalkieChat({
                 key={message.id}
                 className={cn(
                   "max-w-[80%] rounded-lg p-3 text-sm relative", // Базовые стили
+                  "break-words prose prose-sm dark:prose-invert",
+                  "prose-p:m-0 prose-ul:m-0 prose-ol:m-0 prose-li:m-0",
                   message.sender === "user" ? "ml-auto" : "", // Позиционирование пользователя
-                  // Стандартные стили темы, ЕСЛИ accentColor НЕ задан
-                  !accentColor &&
+
+                  // Стандартные стили темы (Применяются если accentColor не задан ИЛИ если это сообщение ассистента)
+                  (!accentColor || message.sender === "assistant") &&
                     (theme === "light"
                       ? message.sender === "user"
-                        ? "bg-neutral-900 text-white"
-                        : "bg-neutral-200 text-neutral-900"
+                        ? "bg-neutral-900 text-white" // Пользователь (светлая тема, без accentColor)
+                        : "bg-neutral-200 text-neutral-900" // Ассистент (светлая тема)
                       : theme === "dark"
                       ? message.sender === "user"
-                        ? "bg-white text-black"
-                        : "bg-secondary text-secondary-foreground"
-                      : // Doctalkie theme uses primary/secondary
+                        ? "bg-white text-black" // Пользователь (темная тема, без accentColor)
+                        : "bg-secondary text-secondary-foreground" // Ассистент (темная тема)
+                      : // Doctalkie theme
                       message.sender === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-secondary text-secondary-foreground"),
-                  // Цвет текста, если accentColor ЗАДАН
-                  accentColor &&
-                    (theme === "light"
-                      ? "text-neutral-900" // Предполагаем темный текст на светлом accentColor
-                      : "text-white") // Предполагаем белый текст на темном accentColor (для dark и doctalkie)
+                      ? "bg-primary text-primary-foreground" // Пользователь (doctalkie, без accentColor)
+                      : "bg-secondary text-secondary-foreground"), // Ассистент (doctalkie)
+
+                  // Добавляем белый текст для сообщений пользователя, если задан accentColor
+                  accentColor && message.sender === "user" && "text-white"
                 )}
-                // Применяем акцентный цвет фона ко ВСЕМ сообщениям, если accentColor задан
-                style={accentColor ? accentStyle : {}}
+                style={
+                  accentColor && message.sender === "user" ? accentStyle : {}
+                }
               >
                 {message.isLoading ? (
                   <div className="flex items-center justify-center h-full min-h-[20px]">
                     <Loader2
                       className={cn(
                         "h-4 w-4 animate-spin",
-                        // Цвет лоадера
                         theme === "light"
                           ? "text-neutral-500"
                           : theme === "dark"
                           ? "text-neutral-400"
-                          : "text-muted-foreground" // Doctalkie theme
+                          : "text-muted-foreground"
                       )}
                     />
                   </div>
                 ) : (
-                  message.content
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      pre: ({ node, ...props }) => (
+                        <pre
+                          {...props}
+                          // Применяем стили непосредственно к pre
+                          className={cn(
+                            "bg-neutral-100 dark:bg-neutral-800 p-3 rounded-md overflow-x-auto my-2", // Добавляем небольшой вертикальный отступ my-2
+                            props.className // Сохраняем возможные другие классы
+                          )}
+                        />
+                      ),
+                      // Можно добавить стили и для code (инлайн-код)
+                      // code: ({ node, inline, className, children, ...props }) => {
+                      //   const match = /language-(\w+)/.exec(className || '');
+                      //   return !inline && match ? (
+                      //     <code {...props} className={cn("your-code-styles", className)}>{children}</code>
+                      //   ) : (
+                      //     <code {...props} className={cn("bg-muted px-1 py-0.5 rounded", className)}>{children}</code>
+                      //   );
+                      // }
+                    }}
+                  >
+                    {message.content}
+                  </ReactMarkdown>
                 )}
               </div>
             ))}

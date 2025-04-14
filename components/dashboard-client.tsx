@@ -170,8 +170,6 @@ export default function DashboardClient({
   const copyToClipboard = async (text: string | undefined) => {
     if (text) {
       await navigator.clipboard.writeText(text);
-      console.log("Copied to clipboard!");
-      // Add toast notification
     }
   };
 

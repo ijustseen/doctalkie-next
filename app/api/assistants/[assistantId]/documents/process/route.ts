@@ -93,13 +93,11 @@ export async function POST(
 
     // Извлечение текста в зависимости от типа файла
     if (file.type === "application/pdf") {
-      console.log("Processing PDF: Dynamically importing pdf-parse...");
       try {
         // Динамический импорт pdf-parse только при необходимости
         const pdfParse = (await import("pdf-parse")).default;
         const data = await pdfParse(fileBuffer, {}); // Используем пустые опции
         extractedText = data.text;
-        console.log("PDF processing successful.");
       } catch (pdfError) {
         console.error("Error during PDF processing:", pdfError);
         throw new Error(
@@ -113,13 +111,11 @@ export async function POST(
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     ) {
       // DOCX
-      console.log("Attempting to process DOCX file with Mammoth..."); // Лог 1
       try {
         const result = await mammoth.extractRawText({ buffer: fileBuffer });
-        console.log("Mammoth processing successful."); // Лог 2
         extractedText = result.value;
       } catch (docxError) {
-        console.error("Error during Mammoth processing:", docxError); // Лог 3 (ошибка Mammoth)
+        console.error("Error during Mammoth processing:", docxError);
         // Устанавливаем текст ошибки, чтобы он мог быть возвращен пользователю
         throw new Error(
           `Failed to extract text from DOCX: ${
@@ -128,12 +124,19 @@ export async function POST(
         );
       }
     } else if (file.type === "text/plain") {
+      // TXT
       extractedText = fileBuffer.toString("utf-8");
+    } else if (file.type === "text/markdown") {
+      // MARKDOWN
+      extractedText = fileBuffer.toString("utf-8"); // Обрабатываем как обычный текст
     } else {
+      console.warn(`Unsupported file type received: ${file.type}`);
       return NextResponse.json(
-        { error: `Unsupported file type: ${file.type}` },
-        { status: 415 }
-      ); // 415 Unsupported Media Type
+        {
+          error: `Unsupported file type: ${file.type}. Supported types: PDF, DOCX, TXT, MD`,
+        }, // Обновляем сообщение об ошибке
+        { status: 415 } // 415 Unsupported Media Type
+      );
     }
 
     if (!extractedText.trim()) {
@@ -142,11 +145,8 @@ export async function POST(
       );
     }
 
-    console.log(`Extracted text length: ${extractedText.length} characters`);
-
     // --- Чанкинг текста ---
     const chunks = simpleChunker(extractedText); // Используем простой чанкер
-    console.log(`Split into ${chunks.length} chunks.`);
 
     // --- Сохранение в базу данных ---
     // ВАЖНО: Обязательно используйте транзакцию Supabase (`supabase.rpc(...)`),
@@ -155,7 +155,6 @@ export async function POST(
       // Начало "псевдо-транзакции" (реальную транзакцию лучше через RPC)
 
       // 1. Запись информации о документе в таблицу 'documents'
-      console.log(`Inserting document record for ${fileName}...`);
       const { data: documentRecord, error: docError } = await supabase
         .from("documents") // <-- Убедитесь, что имя таблицы правильное
         .insert({
@@ -183,7 +182,6 @@ export async function POST(
         throw new Error("Failed to retrieve document ID after insert.");
       }
       const documentId = documentRecord.id; // Получаем РЕАЛЬНЫЙ ID
-      console.log(`Document record created with ID: ${documentId}`);
 
       // 2. Подготовка записей чанков для вставки
       const chunkRecords = chunks.map((chunkText, index) => ({
@@ -194,9 +192,6 @@ export async function POST(
       }));
 
       // 3. Вставка чанков в таблицу 'document_chunks'
-      console.log(
-        `Inserting ${chunkRecords.length} chunks into document_chunks for document ${documentId}...`
-      );
       const { error: chunkError } = await supabase
         .from("document_chunks")
         .insert(chunkRecords);
@@ -213,7 +208,6 @@ export async function POST(
       }
 
       // 4. Обновление статуса документа в 'documents' на 'ready' и установка processed_at
-      console.log(`Updating document ${documentId} status to ready...`);
       const { error: updateError } = await supabase
         .from("documents")
         .update({
