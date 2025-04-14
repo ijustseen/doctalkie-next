@@ -32,11 +32,15 @@ export default function DocTalkieChat({
   welcomeMessage = "Hi there! How can I help you today?",
   className,
 }: DocTalkieChatProps) {
+  // --- Состояния Компонента (UI) ---
   const [isOpen, setIsOpen] = useState(false);
+  const [isRendered, setIsRendered] = useState(false); // Новое состояние для управления рендерингом/анимацией
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  // --- Конец Состояний Компонента ---
 
+  // --- Используем Хук для API и Сообщений ---
   const { messages, isLoading, error, sendMessage } = useDocTalkie({
     apiURL,
     apiKey,
@@ -49,9 +53,22 @@ export default function DocTalkieChat({
       },
     ],
   });
+  // --- Конец Вызова Хука ---
 
+  // --- Обработчики UI Событий ---
   const toggleChat = () => {
-    setIsOpen(!isOpen);
+    if (isOpen) {
+      // Начинаем закрытие: сначала запускаем анимацию (меняем стили через isOpen)
+      setIsOpen(false);
+      // Затем, после завершения анимации, убираем элемент из DOM
+      setTimeout(() => setIsRendered(false), 300); // Длительность анимации
+    } else {
+      // Начинаем открытие: сначала добавляем элемент в DOM
+      setIsRendered(true);
+      // Затем, на следующем кадре/тике, запускаем анимацию (меняем стили через isOpen)
+      // requestAnimationFrame(() => setIsOpen(true)); // Можно использовать requestAnimationFrame
+      setTimeout(() => setIsOpen(true), 10); // Или небольшой таймаут
+    }
   };
 
   const handleTriggerSend = () => {
@@ -67,18 +84,22 @@ export default function DocTalkieChat({
       handleTriggerSend();
     }
   };
+  // --- Конец Обработчиков UI Событий ---
 
+  // --- Эффекты ---
   useEffect(() => {
     if (isOpen) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
       inputRef.current?.focus();
     }
   }, [isOpen, messages]);
+  // --- Конец Эффектов ---
 
   // --- Стили на основе пропсов ---
   const accentStyle = accentColor ? { backgroundColor: accentColor } : {};
   // --- Конец стилей ---
 
+  // --- JSX ---
   return (
     <div
       className={cn(
@@ -87,18 +108,23 @@ export default function DocTalkieChat({
         className
       )}
     >
-      {/* Окно чата */}
-      {isOpen && (
+      {/* Окно чата: рендерится по isRendered, анимируется по isOpen */}
+      {isRendered && (
         <Card
           className={cn(
-            "absolute bottom-16 w-80 md:w-96 h-[500px] shadow-lg border overflow-hidden flex flex-col",
-            // Стили темы для Card
+            "absolute bottom-16 w-80 md:w-96 h-[600px] shadow-lg border overflow-hidden flex flex-col",
+            // Базовые стили темы
             theme === "light"
               ? "bg-white border-neutral-200 text-black"
               : theme === "dark"
-              ? "bg-neutral-950 border-neutral-800 text-white" // Dark theme
-              : "bg-card border text-card-foreground", // Doctalkie theme (default)
-            position === "bottom-right" ? "right-0" : "left-0"
+              ? "bg-neutral-950 border-neutral-800 text-white"
+              : "bg-card border text-card-foreground",
+            position === "bottom-right" ? "right-0" : "left-0",
+            // Классы для анимации
+            "transition-all duration-300 ease-out", // Базовый переход
+            isOpen
+              ? "opacity-100 scale-100 translate-y-0"
+              : "opacity-0 scale-95 translate-y-4" // Состояния Открыто/Закрыто
           )}
         >
           {/* Header */}
