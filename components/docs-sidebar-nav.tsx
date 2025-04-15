@@ -6,6 +6,7 @@ import {
   Code,
   MessageCircle,
   Settings,
+  Zap,
   BookOpen,
   FileText,
   Github,
@@ -13,15 +14,14 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-// Define navigation items (может быть передано как пропс или определено здесь)
+// Define navigation items
 const sidebarNavItems = [
   { title: "Introduction", id: "introduction", icon: FileText },
   { title: "Installation", id: "installation", icon: Code },
-  { title: "Basic Usage", id: "usage", icon: MessageCircle },
-  { title: "Configuration", id: "configuration", icon: Settings },
-  { title: "Advanced Usage", id: "advanced", icon: BookOpen },
-  { title: "Examples", id: "examples", icon: FileText }, // Add examples if section exists
-  // Добавьте другие секции по мере необходимости
+  { title: "Usage: Chat Widget", id: "usage-widget", icon: MessageCircle },
+  { title: "Widget Configuration", id: "widget-configuration", icon: Settings },
+  { title: "Usage: Hook (Advanced)", id: "usage-hook", icon: Zap },
+  { title: "Examples", id: "examples", icon: BookOpen }, // Using BookOpen for examples
 ];
 
 // Helper function to format numbers (e.g., 1200 -> 1.2k)

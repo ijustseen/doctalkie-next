@@ -25,7 +25,7 @@ const plans = [
       { name: "Custom Branding", included: false },
     ],
     cta: "Get Started",
-    popular: false,
+    popular: true,
   },
   {
     name: "Pro",
@@ -41,7 +41,7 @@ const plans = [
       { name: "Custom Branding", included: true },
     ],
     cta: "Choose Pro",
-    popular: true,
+    popular: false,
   },
   {
     name: "Premium",
