@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 // Define navigation items
 const sidebarNavItems = [
   { title: "Introduction", id: "introduction", icon: FileText },
+  { title: "Installation", id: "installation", icon: Code },
   { title: "Usage: Chat Widget", id: "usage-widget", icon: MessageCircle },
   { title: "Widget Configuration", id: "widget-configuration", icon: Settings },
   { title: "Usage: Hook (Advanced)", id: "usage-hook", icon: Zap },

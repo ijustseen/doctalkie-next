@@ -8,33 +8,29 @@ Explore the sections below: 'Usage: Chat Widget' for the quickest integration, o
 
 ---
 
-## Getting Started (Running Locally)
+## Installation
 
-1.  **Clone the repository:**
-    ```bash
-    git clone <your-repository-url>
-    cd doctalkie-website
-    ```
-2.  **Install dependencies:**
-    ```bash
-    npm install
-    # or yarn install or pnpm install
-    ```
-3.  **Set up environment variables:**
-    Create a `.env.local` file in the root directory and add your Supabase and Groq credentials:
-    ```env
-    NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-    SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
-    GROQ_API_KEY=your_groq_api_key
-    GROQ_LLM_MODEL_NAME=llama3-8b-8192 # Or your preferred model
-    # Add any other required variables
-    ```
-4.  **Run the development server:**
-    ```bash
-    npm run dev
-    # or yarn dev or pnpm dev
-    ```
-    Open [http://localhost:3000](http://localhost:3000) in your browser.
+To integrate DocTalkie into your React project, install the package using your preferred package manager:
+
+**Using npm:**
+
+```bash
+npm install doctalkie-react
+```
+
+**Using yarn:**
+
+```bash
+yarn add doctalkie-react
+```
+
+**Using pnpm:**
+
+```bash
+pnpm add doctalkie-react
+```
+
+Once installed, you can import the necessary components or hooks into your application as shown in the usage sections.
 
 ---
 

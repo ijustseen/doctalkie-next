@@ -52,6 +52,49 @@ export default function DocsPage() {
                 </p>
               </section>
 
+              {/* --- NEW Installation Section --- */}
+              <section id="installation" className="scroll-mt-16 space-y-4">
+                <h2 className="text-2xl font-bold flex items-center gap-2">
+                  <Code className="h-6 w-6 text-primary" />
+                  Installation
+                </h2>
+                <p className="text-muted-foreground">
+                  To integrate DocTalkie into your React project, install the
+                  package using your preferred package manager:
+                </p>
+                <Card>
+                  <CardContent className="pt-6 space-y-4">
+                    <div>
+                      <p className="mb-2 font-medium">Using npm:</p>
+                      <CodeBlock
+                        code="npm install doctalkie-react"
+                        language="bash"
+                      />
+                    </div>
+                    <div>
+                      <p className="mb-2 font-medium">Using yarn:</p>
+                      <CodeBlock
+                        code="yarn add doctalkie-react"
+                        language="bash"
+                      />
+                    </div>
+                    <div>
+                      <p className="mb-2 font-medium">Using pnpm:</p>
+                      <CodeBlock
+                        code="pnpm add doctalkie-react"
+                        language="bash"
+                      />
+                    </div>
+                    <p className="text-sm text-muted-foreground pt-2">
+                      Once installed, you can import the necessary components or
+                      hooks into your application as shown in the usage
+                      sections.
+                    </p>
+                  </CardContent>
+                </Card>
+              </section>
+              {/* --- End of Installation Section --- */}
+
               <section id="usage-widget" className="scroll-mt-16">
                 <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
                   <MessageCircle className="h-6 w-6 text-primary" />
