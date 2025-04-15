@@ -189,6 +189,8 @@ export default function DocTalkieChat({
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [botName, setBotName] = useState<string>("DocTalkie Assistant");
+  const [isNameLoading, setIsNameLoading] = useState<boolean>(true);
 
   const { messages, isLoading, error, sendMessage } = useDocTalkie({
     apiURL,
@@ -235,6 +237,35 @@ export default function DocTalkieChat({
       inputRef.current?.focus();
     }
   }, [isOpen, messages]);
+
+  useEffect(() => {
+    const fetchBotName = async () => {
+      setIsNameLoading(true);
+      const nameUrl = `${apiURL.replace(/\/?$/, "")}/getName`;
+      try {
+        const response = await fetch(nameUrl);
+        if (!response.ok) {
+          console.warn(`Failed to fetch bot name: ${response.status}`);
+          setBotName("DocTalkie Assistant");
+          return;
+        }
+        const data = await response.json();
+        if (data.name) {
+          setBotName(data.name);
+        } else {
+          console.warn("Bot name not found in API response.");
+          setBotName("DocTalkie Assistant");
+        }
+      } catch (err) {
+        console.error("Error fetching bot name:", err);
+        setBotName("DocTalkie Assistant");
+      } finally {
+        setIsNameLoading(false);
+      }
+    };
+
+    fetchBotName();
+  }, [apiURL]);
 
   // --- Style Objects ---
 
@@ -503,7 +534,9 @@ export default function DocTalkieChat({
               <div style={indicatorStyle}>
                 {/* Pulse animation would require CSS @keyframes */}
               </div>
-              <span style={headerTextStyle}>DocTalkie Assistant</span>
+              <span style={headerTextStyle}>
+                {isNameLoading ? "Loading..." : botName}
+              </span>
             </div>
             <button // Replaced Button with button
               style={closeButtonStyle}
