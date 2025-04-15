@@ -52,37 +52,14 @@ export function useDocTalkie({
       setMessages((prev) => [...prev, userMessage, assistantPlaceholder]);
       setIsLoading(true);
 
-      // --- Извлечение ID и формирование URL для чата ---
-      let targetChatUrl = "";
-      try {
-        // Убираем возможный слеш в конце и разделяем по /
-        const urlParts = apiURL.replace(/\/?$/, "").split("/");
-        const id = urlParts[urlParts.length - 1];
-        if (!id) {
-          throw new Error("Could not extract ID from apiURL");
-        }
-        targetChatUrl = `/api/chat/${id}`; // Используем относительный путь для API роута
-      } catch (urlError) {
-        console.error("Error constructing chat URL:", urlError);
-        const errorMessage = `Error: Invalid API URL configuration. ${
-          urlError instanceof Error ? urlError.message : ""
-        }`.trim();
-        setError(errorMessage);
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === assistantPlaceholderId
-              ? { ...msg, content: errorMessage, isLoading: false }
-              : msg
-          )
-        );
-        setIsLoading(false);
-        return; // Прерываем выполнение
-      }
-      // --- Конец формирования URL ---
+      // --- УДАЛЕНО: Извлечение ID и формирование URL ---
+      // Хук должен использовать предоставленный apiURL напрямую
+      // --- Конец удаления ---
 
       try {
-        // Используем targetChatUrl
-        const response = await fetch(targetChatUrl, {
+        // Используем переданный apiURL напрямую
+        const response = await fetch(apiURL, {
+          // <-- ИСПОЛЬЗУЕМ apiURL
           method: "POST",
           headers: {
             "Content-Type": "application/json",
