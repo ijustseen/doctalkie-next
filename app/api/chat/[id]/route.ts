@@ -31,12 +31,20 @@ if (supabaseUrl && supabaseServiceKey) {
 // --- Вспомогательные Функции ---
 
 // Аутентификация и получение данных ассистента
-async function authenticateAndGetAssistant(id: string, apiKey: string) {
+async function authenticateAndGetAssistant(
+  id: string,
+  apiKey: string
+): Promise<{
+  id: string;
+  api_key: string;
+  strict_context: boolean;
+  user_id: string;
+}> {
   if (!supabaseAdmin) throw new Error("Supabase client not initialized");
 
   const { data: assistant, error } = await supabaseAdmin
     .from("bots")
-    .select("id, api_key, strict_context")
+    .select("id, api_key, strict_context, user_id")
     .eq("id", id)
     .single();
 
@@ -177,10 +185,7 @@ async function callGroqApi(prompt: string): Promise<string> {
 }
 
 // --- Основной Обработчик POST ---
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function POST(req: NextRequest) {
   // 1. Проверка инициализации клиентов
   if (!groq || !supabaseAdmin) {
     console.error(
@@ -196,17 +201,43 @@ export async function POST(
   }
 
   // 2. Извлечение и валидация данных запроса
-  const assistantId = params?.id;
+  // ПОЛУЧАЕМ ID ИЗ URL (НОВЫЙ СПОСОБ)
+  let assistantId: string | undefined;
+  try {
+    const pathnameParts = req.nextUrl.pathname.split("/");
+    // Ожидаемая структура: ['', 'api', 'chat', assistantId]
+    // Элемент с индексом 3 должен быть ID
+    if (
+      pathnameParts.length === 4 &&
+      pathnameParts[1] === "api" &&
+      pathnameParts[2] === "chat"
+    ) {
+      assistantId = pathnameParts[3];
+    }
+  } catch (e) {
+    console.error("[POST /api/chat] Error parsing assistant ID from URL:", e);
+    assistantId = undefined;
+  }
+
   const authHeader = req.headers.get("Authorization");
   let query: string | undefined;
 
   // Проверка assistantId
   if (!assistantId) {
+    console.error(
+      "[POST /api/chat] Could not extract Assistant ID from URL path:",
+      req.nextUrl.pathname
+    );
     return NextResponse.json(
-      { error: "Assistant ID is missing" },
+      { error: "Assistant ID is missing or invalid URL" },
       { status: 400 }
     );
   }
+  // Добавим лог
+  console.log(
+    `[POST /api/chat] Extracted assistantId from URL: ${assistantId}`
+  );
+
   // Проверка Authorization Header
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return NextResponse.json(
@@ -261,7 +292,21 @@ export async function POST(
     // Шаг 3.5: Вызов LLM
     const answer = await callGroqApi(prompt);
 
-    // Шаг 3.6: Успешный ответ
+    // Шаг 3.7: Обновление статистики запросов пользователя (ДОБАВЛЕНО)
+    const { error: userQueryStatError } = await supabaseAdmin.rpc(
+      "increment_user_queries", // Вызываем созданную функцию
+      { user_id_param: assistant.user_id } // Передаем ID пользователя из данных ассистента
+    );
+
+    if (userQueryStatError) {
+      console.warn(
+        `Failed to update query count statistics for user ${assistant.user_id}:`,
+        userQueryStatError
+      );
+      // Не прерываем процесс, если обновление статистики не удалось, но логируем предупреждение
+    }
+
+    // Шаг 3.8: Отправка ответа
     return NextResponse.json({ answer });
   } catch (error) {
     // Обработка ошибок

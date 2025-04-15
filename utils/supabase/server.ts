@@ -1,9 +1,8 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
-import { cookies } from "next/headers";
-
-export const createClient = () => {
-  const cookieStore = cookies();
-
+// Принимаем cookieStore как аргумент
+export const createClient = (
+  cookieStore: ReturnType<typeof import("next/headers")["cookies"]>
+) => {
   // Получаем переменные окружения
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   // Важно: Используем Service Role Key ТОЛЬКО на сервере!

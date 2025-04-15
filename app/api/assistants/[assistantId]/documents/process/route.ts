@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/utils/supabase/server"; // Предполагаемый путь к серверному клиенту Supabase
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { cookies } from "next/headers";
 // import pdf from "pdf-parse"; // УДАЛЯЕМ статический импорт
 import mammoth from "mammoth";
+import { createClient as createSupabaseJsClient } from "@supabase/supabase-js";
 
 // Опционально: Простая функция для чанкинга (можно заменить на более продвинутую)
 function simpleChunker(
@@ -21,12 +23,78 @@ function simpleChunker(
   return chunks;
 }
 
-export async function POST(
-  req: NextRequest,
-  { params }: { params: { assistantId: string } }
-) {
-  const supabase = createClient();
-  const assistantId = params.assistantId;
+export async function POST(req: NextRequest) {
+  const cookieStore = await cookies();
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+  if (!supabaseUrl || !supabaseServiceKey) {
+    console.error(
+      "[documents/process] Supabase URL or Service Role Key missing."
+    );
+    return NextResponse.json(
+      { error: "Server configuration error (keys missing)." },
+      { status: 500 }
+    );
+  }
+
+  const supabase = createServerClient(supabaseUrl, supabaseServiceKey, {
+    cookies: {
+      get(name: string) {
+        return cookieStore.get(name)?.value;
+      },
+      set(name: string, value: string, options: CookieOptions) {
+        try {
+          cookieStore.set({ name, value, ...options });
+        } catch (error) {
+          /* Ignored */
+        }
+      },
+      remove(name: string, options: CookieOptions) {
+        try {
+          cookieStore.set({ name, value: "", ...options });
+        } catch (error) {
+          /* Ignored */
+        }
+      },
+    },
+    auth: {
+      // Добавляем опции auth для service_role ключа
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
+
+  let assistantId: string | undefined;
+  try {
+    const pathnameParts = req.nextUrl.pathname.split("/");
+    // Ожидаемая структура: ['', 'api', 'assistants', assistantId, 'documents', 'process']
+    // Элемент с индексом 3 должен быть ID
+    if (pathnameParts.length === 6 && pathnameParts[5] === "process") {
+      assistantId = pathnameParts[3];
+    }
+  } catch (e) {
+    console.error(
+      "[documents/process] Error parsing assistant ID from URL:",
+      e
+    );
+    assistantId = undefined;
+  }
+
+  if (!assistantId) {
+    console.error(
+      "[documents/process] Could not extract Assistant ID from URL path:",
+      req.nextUrl.pathname
+    );
+    return NextResponse.json(
+      { error: "Assistant ID is missing or invalid URL" },
+      { status: 400 }
+    );
+  }
+  console.log(
+    `[documents/process] Extracted assistantId from URL: ${assistantId}`
+  );
 
   // --- Проверка авторизации пользователя ---
   const {
@@ -34,7 +102,7 @@ export async function POST(
     error: userError,
   } = await supabase.auth.getUser();
   if (userError || !user) {
-    // console.error("Unauthorized: User not found", userError); // Можно добавить детали ошибки
+    console.error("Unauthorized: User not found", userError);
     return NextResponse.json(
       { error: "Unauthorized: User not found" },
       { status: 401 }
@@ -124,14 +192,22 @@ export async function POST(
           }`
         );
       }
-    } else if (file.type === "text/plain") {
-      // TXT
+    } else if (file.type === "text/plain" || file.type === "text/markdown") {
+      // TXT или MARKDOWN (по MIME типу)
       extractedText = fileBuffer.toString("utf-8");
-    } else if (file.type === "text/markdown") {
-      // MARKDOWN
+    } else if (
+      file.type === "application/octet-stream" &&
+      fileName.toLowerCase().endsWith(".md")
+    ) {
+      // Обработка .md файла, который пришел с неправильным MIME типом
+      console.log(
+        `Treating file ${fileName} with type ${file.type} as markdown based on extension.`
+      );
       extractedText = fileBuffer.toString("utf-8");
     } else {
-      console.warn(`Unsupported file type received: ${file.type}`); // Оставляем предупреждение
+      console.warn(
+        `Unsupported file type received: ${file.type} for file ${fileName}`
+      );
       return NextResponse.json(
         {
           error: `Unsupported file type: ${file.type}. Supported types: PDF, DOCX, TXT, MD`,
@@ -152,6 +228,7 @@ export async function POST(
     // --- Сохранение в базу данных ---
     try {
       // 1. Запись информации о документе в таблицу 'documents'
+      console.log(`[${fileName}] Attempting to insert document record...`);
       const { data: documentRecord, error: docError } = await supabase
         .from("documents")
         .insert({
@@ -159,25 +236,24 @@ export async function POST(
           file_name: fileName,
           file_size_bytes: file.size,
           status: "processing",
-          storage_path: "",
+          storage_path: "", // Оставляем пустым, если не загружаем в Storage
         })
         .select("id")
         .single();
 
       if (docError) {
         console.error(
-          `Error inserting document record for ${fileName}:`,
+          `[${fileName}] Error inserting document record:`,
           docError
-        ); // Оставляем ошибку
+        );
         throw new Error(
           `Database error while saving document metadata: ${docError.message}`
         );
       }
-
-      if (!documentRecord || !documentRecord.id) {
-        throw new Error("Failed to retrieve document ID after insert.");
-      }
-      const documentId = documentRecord.id;
+      console.log(
+        `[${fileName}] Document record inserted, ID: ${documentRecord.id}`
+      );
+      const documentId = documentRecord.id; // Используем ID дальше
 
       // 2. Подготовка записей чанков для вставки
       const chunkRecords = chunks.map((chunkText, index) => ({
@@ -186,23 +262,42 @@ export async function POST(
         content: chunkText,
         chunk_index: index,
       }));
+      console.log(
+        `[${fileName}] Prepared ${chunkRecords.length} chunk records.`
+      );
 
       // 3. Вставка чанков в таблицу 'document_chunks'
+      console.log(`[${fileName}] Attempting to insert chunks...`);
       const { error: chunkError } = await supabase
         .from("document_chunks")
         .insert(chunkRecords);
 
       if (chunkError) {
         console.error(
-          `Error inserting document chunks for document ${documentId}:`,
+          `[${fileName}] Error inserting document chunks:`,
           chunkError
-        ); // Оставляем ошибку
+        );
+        try {
+          await supabase.from("documents").delete().eq("id", documentId);
+          console.log(
+            `[${fileName}] Rolled back document record insertion due to chunk error.`
+          );
+        } catch (rollbackError) {
+          console.error(
+            `[${fileName}] Failed to rollback document record:`,
+            rollbackError
+          );
+        }
         throw new Error(
           `Database error while saving document content: ${chunkError.message}`
         );
       }
+      console.log(`[${fileName}] Chunks inserted successfully.`);
 
       // 4. Обновление статуса документа в 'documents' на 'ready' и установка processed_at
+      console.log(
+        `[${fileName}] Attempting to update document status to 'ready'...`
+      );
       const { error: updateError } = await supabase
         .from("documents")
         .update({
@@ -213,15 +308,85 @@ export async function POST(
 
       if (updateError) {
         console.warn(
-          `Failed to update document ${documentId} status to ready:`,
+          `[${fileName}] Failed to update document status to ready for doc ${documentId}:`,
           updateError
-        ); // Оставляем предупреждение
+        );
+      } else {
+        console.log(`[${fileName}] Document status updated to 'ready'.`);
+      }
+
+      // 5. Обновление статистики использования хранилища пользователя (ИСПОЛЬЗУЕМ ОБЫЧНЫЙ КЛИЕНТ)
+      console.log(
+        `[${fileName}] Updating user storage stats via supabase-js client...`
+      );
+      try {
+        // СОЗДАЕМ ОТДЕЛЬНЫЙ КЛИЕНТ ДЛЯ ЭТОЙ ОПЕРАЦИИ
+        const supabaseJsAdmin = createSupabaseJsClient(
+          supabaseUrl,
+          supabaseServiceKey
+        );
+
+        const { data: currentData, error: selectError } = await supabaseJsAdmin
+          .from("users")
+          .select("total_storage_usage_bytes")
+          .eq("id", user.id)
+          .single();
+
+        if (selectError) {
+          console.error(
+            `[${fileName}] Error fetching current storage bytes (supabase-js):`,
+            selectError
+          );
+          throw new Error(
+            "Could not fetch current user storage stats (supabase-js)."
+          );
+        }
+        if (!currentData) {
+          console.error(
+            `[${fileName}] User not found when fetching current storage bytes (supabase-js)`
+          );
+          throw new Error(
+            "User not found for storage stats update (supabase-js)."
+          );
+        }
+        const currentBytes = currentData.total_storage_usage_bytes ?? 0;
+        const bytesToAdd = file.size;
+        const newTotalBytes = currentBytes + bytesToAdd;
+        console.log(
+          `[${fileName}] (supabase-js) Current bytes: ${currentBytes}, Adding: ${bytesToAdd}, New total: ${newTotalBytes}`
+        );
+
+        const { error: updateStatsError } = await supabaseJsAdmin
+          .from("users")
+          .update({ total_storage_usage_bytes: newTotalBytes })
+          .eq("id", user.id);
+
+        if (updateStatsError) {
+          console.error(
+            `[${fileName}] Error updating storage bytes (supabase-js):`,
+            updateStatsError
+          );
+          console.warn(
+            `[${fileName}] Failed to update user storage statistics (supabase-js).`
+          );
+        } else {
+          console.log(
+            `[${fileName}] User storage stats updated successfully via UPDATE (supabase-js).`
+          );
+        }
+      } catch (statsUpdateError) {
+        console.error(
+          `[${fileName}] Exception during storage stats update (supabase-js):`,
+          statsUpdateError
+        );
+        console.warn(
+          `[${fileName}] Failed to update user storage statistics due to exception (supabase-js).`
+        );
       }
 
       console.log(
-        "Successfully processed and saved document and chunks for",
-        fileName
-      ); // Оставляем итоговый лог успеха
+        `[${fileName}] Successfully processed and saved document and chunks.`
+      );
       return NextResponse.json({
         success: true,
         message: `Processed ${fileName}`,
@@ -229,11 +394,10 @@ export async function POST(
         chunksCount: chunks.length,
       });
     } catch (dbError) {
-      // Обработка ошибок базы данных (из шагов 1, 3 или 4)
       console.error(
-        `Database operation failed during processing ${fileName}:`,
+        `[${fileName}] Database operation failed during processing:`,
         dbError
-      ); // Оставляем ошибку
+      );
       return NextResponse.json(
         {
           error: `Database error during processing: ${
@@ -244,8 +408,7 @@ export async function POST(
       );
     }
   } catch (processingError) {
-    // Обработка ошибок парсинга файла или других ошибок до БД
-    console.error(`Error processing file ${fileName}:`, processingError); // Оставляем ошибку
+    console.error(`[${fileName}] Error processing file:`, processingError);
     return NextResponse.json(
       {
         error: `Failed to process file: ${

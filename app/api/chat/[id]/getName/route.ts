@@ -16,8 +16,7 @@ if (supabaseUrl && supabaseServiceKey) {
 // --- Конец Инициализации ---
 
 export async function GET(
-  req: NextRequest, // req не используется, но нужен для сигнатуры
-  { params }: { params: { id: string } }
+  req: NextRequest // <-- Убираем { params } отсюда
 ) {
   // 1. Проверка инициализации Supabase
   if (!supabaseAdmin) {
@@ -28,16 +27,34 @@ export async function GET(
     );
   }
 
-  // 2. Получение ID бота
-  const assistantId = params?.id;
+  // 2. Получение ID бота из URL (НОВЫЙ СПОСОБ)
+  let assistantId: string | undefined;
+  try {
+    const pathnameParts = req.nextUrl.pathname.split("/");
+    // Ожидаемая структура: ['', 'api', 'chat', assistantId, 'getName']
+    // Элемент с индексом 3 должен быть ID
+    if (pathnameParts.length === 5 && pathnameParts[4] === "getName") {
+      assistantId = pathnameParts[3];
+    }
+  } catch (e) {
+    console.error("[getName Route] Error parsing assistant ID from URL:", e);
+    assistantId = undefined;
+  }
+
   if (!assistantId) {
+    console.error(
+      "[getName Route] Could not extract Assistant ID from URL path:",
+      req.nextUrl.pathname
+    );
     return NextResponse.json(
-      { error: "Assistant ID is missing" },
+      { error: "Assistant ID is missing or invalid URL" },
       { status: 400 }
     );
   }
+  // Добавим лог для проверки
+  console.log(`[getName Route] Extracted assistantId from URL: ${assistantId}`);
 
-  // 3. Запрос имени бота из БД
+  // 3. Запрос имени бота из БД (используем извлеченный assistantId)
   try {
     const { data: bot, error: dbError } = await supabaseAdmin
       .from("bots")

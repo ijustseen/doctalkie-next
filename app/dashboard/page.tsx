@@ -2,7 +2,6 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import DashboardClient from "@/components/dashboard-client";
-import { DocTalkieChat } from "doctalkie-react";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
@@ -111,17 +110,10 @@ export default async function DashboardPage() {
   };
 
   return (
-    <>
-      <DashboardClient
-        user={user}
-        profile={profileWithSubscription}
-        initialBot={bot ?? null}
-      />
-      <DocTalkieChat
-        apiURL="http://localhost:3000/api/chat/a6ef5aab-2722-4736-b699-d68c4e38ae1a"
-        apiKey="dt_4a8b0aa6-bbe6-468b-a3eb-fe4f1e46297e"
-        theme="doctalkie"
-      />
-    </>
+    <DashboardClient
+      user={user}
+      profile={profileWithSubscription}
+      initialBot={bot ?? null}
+    />
   );
 }

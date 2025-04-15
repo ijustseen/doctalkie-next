@@ -33,6 +33,7 @@ import type { User } from "@supabase/supabase-js";
 import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { DocTalkieChat } from "doctalkie-react";
 
 // Define prop types (basic structure, enhance with full types if available)
 type Subscription = {
@@ -44,8 +45,10 @@ type Subscription = {
 
 type Profile = {
   id: string;
-  subscription_id: string;
+  subscription_id: string | null;
   subscriptions: Subscription;
+  total_queries?: number;
+  total_storage_usage_bytes?: number;
 } | null;
 
 type Bot = {
@@ -112,17 +115,17 @@ export default function DashboardClient({
     !!initialBot?.allowed_origins && initialBot.allowed_origins.length > 0
   );
 
-  // Demo data (replace with actual data later)
-  const currentStorageUsedMB = 2; // Example usage
-  const maxStorageMB = profile?.subscriptions?.max_total_doc_size_mb ?? 5; // From profile or default
-  const storagePercentage = (currentStorageUsedMB / maxStorageMB) * 100;
-
-  const currentRequestsUsed = 120; // Example usage
-  // Assuming a new field `max_requests_month` exists in subscriptions type
-  // Add a type assertion or check if the field exists if necessary
-  const maxRequestsMonth =
-    (profile?.subscriptions as any)?.max_requests_month ?? 500;
-  const requestsPercentage = (currentRequestsUsed / maxRequestsMonth) * 100;
+  // New states for statistics
+  const [userStats, setUserStats] = useState<{
+    queries: number;
+    storageBytes: number;
+  }>({ queries: 0, storageBytes: 0 });
+  const [limits, setLimits] = useState<{
+    maxQueries: number;
+    maxStorageBytes: number;
+  }>({ maxQueries: 0, maxStorageBytes: 0 });
+  const [isLoadingStats, setIsLoadingStats] = useState(true);
+  const [statsError, setStatsError] = useState<string | null>(null);
 
   useEffect(() => {
     // Update local state if initialBot changes
@@ -139,6 +142,83 @@ export default function DashboardClient({
       fileInputRef.current.value = "";
     }
   }, [initialBot]);
+
+  // ВЫНОСИМ ЛОГИКУ ЗАГРУЗКИ СТАТИСТИКИ В ОТДЕЛЬНУЮ ФУНКЦИЮ
+  const fetchUserStatsAndLimits = useCallback(async () => {
+    if (!user) {
+      setStatsError("User not available.");
+      setIsLoadingStats(false);
+      return;
+    }
+    setIsLoadingStats(true);
+    setStatsError(null);
+    try {
+      // 1. Получаем статистику и ID подписки пользователя
+      const { data: userData, error: userError } = await supabase
+        .from("users")
+        .select("total_queries, total_storage_usage_bytes, subscription_id")
+        .eq("id", user.id)
+        .single();
+
+      // ЛОГИРУЕМ ПОЛУЧЕННЫЕ ДАННЫЕ
+      console.log("[fetchUserStatsAndLimits] Fetched userData:", userData);
+      console.log("[fetchUserStatsAndLimits] Fetched userError:", userError);
+
+      if (userError)
+        throw new Error(
+          `Failed to fetch user statistics: ${userError.message}`
+        );
+      if (!userData) throw new Error("User data not found.");
+
+      // Обновляем текущее использование
+      const currentQueries = userData.total_queries ?? 0;
+      const currentStorageBytes = userData.total_storage_usage_bytes ?? 0;
+      console.log(
+        `[fetchUserStatsAndLimits] Setting stats - Queries: ${currentQueries}, Storage Bytes: ${currentStorageBytes}`
+      ); // ЛОГ ПЕРЕД УСТАНОВКОЙ СОСТОЯНИЯ
+      setUserStats({
+        queries: currentQueries,
+        storageBytes: currentStorageBytes,
+      });
+
+      // 2. Получаем лимиты подписки (если она есть)
+      let currentLimits = { maxQueries: 500, maxStorageBytes: 5 * 1024 * 1024 };
+      if (userData.subscription_id) {
+        const { data: subData, error: subError } = await supabase
+          .from("subscriptions")
+          .select("max_requests_month, max_total_doc_size_mb")
+          .eq("id", userData.subscription_id)
+          .single();
+        if (subError) {
+          console.warn(
+            `Failed to fetch subscription details for ${userData.subscription_id}: ${subError.message}. Using default limits.`
+          );
+        } else if (subData) {
+          currentLimits = {
+            maxQueries: subData.max_requests_month ?? 500,
+            maxStorageBytes: (subData.max_total_doc_size_mb ?? 5) * 1024 * 1024,
+          };
+        }
+      } else {
+        console.log("User has no subscription_id, using default limits.");
+      }
+      setLimits(currentLimits);
+    } catch (error) {
+      console.error("Error loading usage statistics:", error);
+      setStatsError(
+        error instanceof Error ? error.message : "Failed to load statistics."
+      );
+      setUserStats({ queries: 0, storageBytes: 0 });
+      setLimits({ maxQueries: 0, maxStorageBytes: 0 });
+    } finally {
+      setIsLoadingStats(false);
+    }
+  }, [user, supabase]); // Зависимости useCallback
+
+  // useEffect для загрузки статистики при монтировании
+  useEffect(() => {
+    fetchUserStatsAndLimits();
+  }, [fetchUserStatsAndLimits]); // Зависимость от useCallback-функции
 
   // Fetch documents when bot ID changes
   const fetchDocuments = useCallback(async () => {
@@ -163,6 +243,7 @@ export default function DashboardClient({
     setIsLoadingDocs(false);
   }, [bot, supabase]);
 
+  // useEffect для загрузки документов при монтировании/смене бота
   useEffect(() => {
     fetchDocuments();
   }, [fetchDocuments]);
@@ -295,36 +376,26 @@ export default function DashboardClient({
       setUploadError("Please select a file and ensure a bot is active.");
       return;
     }
-
     setIsUploading(true);
     setUploadError(null);
-
     const formData = new FormData();
     formData.append("file", selectedFile);
-
     try {
       const response = await fetch(
         `/api/assistants/${bot.id}/documents/process`,
-        {
-          method: "POST",
-          body: formData,
-        }
+        { method: "POST", body: formData }
       );
-
       const result = await response.json();
-
       if (!response.ok) {
         throw new Error(
           result.error || `Upload failed with status: ${response.status}`
         );
       }
-
       console.log("File processed successfully:", result);
       setSelectedFile(null);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-      fetchDocuments();
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      fetchDocuments(); // Обновляем список документов
+      fetchUserStatsAndLimits(); // <<<--- ВЫЗЫВАЕМ ОБНОВЛЕНИЕ СТАТИСТИКИ
     } catch (error) {
       console.error("Error uploading file:", error);
       const message =
@@ -373,14 +444,13 @@ export default function DashboardClient({
     setIsDeletingDoc(null);
   };
 
-  const formatBytes = (bytes: number, decimals = 2) => {
-    if (bytes === 0) return "0 Bytes";
-    const k = 1024;
-    const dm = decimals < 0 ? 0 : decimals;
-    const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + " " + sizes[i];
-  };
+  // Calculate percentages based on new states
+  const storagePercentage =
+    limits.maxStorageBytes > 0
+      ? (userStats.storageBytes / limits.maxStorageBytes) * 100
+      : 0;
+  const requestsPercentage =
+    limits.maxQueries > 0 ? (userStats.queries / limits.maxQueries) * 100 : 0;
 
   // Display subscription name, fallback to ID if name is missing
   const subscriptionName =
@@ -408,531 +478,578 @@ export default function DashboardClient({
     // Note: Actual upload should be triggered by button click or further logic
   };
 
+  // ВОЗВРАЩАЕМ ОПРЕДЕЛЕНИЕ formatBytes СЮДА
+  const formatBytes = (bytes: number, decimals = 2): string => {
+    if (!+bytes) return "0 Bytes"; // Исправлена проверка на 0 и добавлено '+' для преобразования
+
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ["Bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"];
+
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+  };
+
   return (
-    <div className="container py-10">
-      <div className="mb-6 flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Dashboard</h1>
-        <div className="text-sm text-muted-foreground">
-          Plan:{" "}
-          <span className="font-semibold text-primary">{subscriptionName}</span>
+    <>
+      <div className="container py-10">
+        <div className="mb-6 flex justify-between items-center">
+          <h1 className="text-3xl font-bold">Dashboard</h1>
+          <div className="text-sm text-muted-foreground">
+            Plan:{" "}
+            <span className="font-semibold text-primary">
+              {subscriptionName}
+            </span>
+          </div>
         </div>
-      </div>
-      <Tabs defaultValue="settings" className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="settings">Settings</TabsTrigger>
-          <TabsTrigger value="docs" disabled={!bot}>
-            Documentation
-          </TabsTrigger>
-          <TabsTrigger value="analytics" disabled={!bot}>
-            Analytics
-          </TabsTrigger>
-        </TabsList>
+        <Tabs defaultValue="settings" className="space-y-6">
+          <TabsList>
+            <TabsTrigger value="settings">Settings</TabsTrigger>
+            <TabsTrigger value="docs" disabled={!bot}>
+              Documentation
+            </TabsTrigger>
+            <TabsTrigger value="analytics" disabled={!bot}>
+              Analytics
+            </TabsTrigger>
+          </TabsList>
 
-        {/* Settings Tab */}
-        <TabsContent value="settings">
-          {!bot ? (
-            // Show Create Bot Card if no bot exists (full width)
-            <Card>
-              <CardHeader>
-                <CardTitle>Create Your First Bot</CardTitle>
-                <CardDescription>
-                  Let's get your AI assistant set up.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="new-assistant-name">Assistant Name</Label>
-                  <Input
-                    id="new-assistant-name"
-                    value={assistantName}
-                    onChange={(e) => setAssistantName(e.target.value)}
-                    placeholder="My Awesome Bot"
-                  />
-                </div>
-                <div className="flex items-center justify-between pt-2">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="new-project-only">
-                      Answer only project-related questions
-                    </Label>
-                    <p className="text-sm text-muted-foreground">
-                      Restrict answers to your documentation context.
-                    </p>
+          {/* Settings Tab */}
+          <TabsContent value="settings">
+            {!bot ? (
+              // Show Create Bot Card if no bot exists (full width)
+              <Card>
+                <CardHeader>
+                  <CardTitle>Create Your First Bot</CardTitle>
+                  <CardDescription>
+                    Let's get your AI assistant set up.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="new-assistant-name">Assistant Name</Label>
+                    <Input
+                      id="new-assistant-name"
+                      value={assistantName}
+                      onChange={(e) => setAssistantName(e.target.value)}
+                      placeholder="My Awesome Bot"
+                    />
                   </div>
-                  <Switch
-                    id="new-project-only"
-                    checked={projectOnly}
-                    onCheckedChange={setProjectOnly}
-                  />
-                </div>
-                <Button
-                  onClick={handleCreateBot}
-                  disabled={isCreating}
-                  className="w-full mt-4"
-                >
-                  {isCreating ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                  )}
-                  Create Bot
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] lg:items-start gap-6">
-              {/* Column 1 (2fr): Assistant Settings & API Credentials */}
-              <div className="space-y-6">
-                {/* Assistant Settings Card */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Assistant Settings</CardTitle>
-                    <CardDescription>
-                      Configure the behavior of your assistant.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    {/* Assistant Name */}
-                    <div className="space-y-2">
-                      <Label htmlFor="assistant-name">Assistant Name</Label>
-                      <Input
-                        id="assistant-name"
-                        value={assistantName}
-                        onChange={(e) => setAssistantName(e.target.value)}
-                        placeholder="My Documentation Bot"
-                      />
-                    </div>
-
-                    {/* Project Only Switch */}
-                    <div className="flex items-center justify-between space-x-2 border p-4 rounded-md">
-                      <Label
-                        htmlFor="project-only-switch"
-                        className="flex flex-col space-y-1"
-                      >
-                        <span>Answer only project-related questions</span>
-                        <span className="font-normal leading-snug text-muted-foreground">
-                          Limit responses to the content of your uploaded
-                          documents.
-                        </span>
+                  <div className="flex items-center justify-between pt-2">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="new-project-only">
+                        Answer only project-related questions
                       </Label>
-                      <Switch
-                        id="project-only-switch"
-                        checked={projectOnly}
-                        onCheckedChange={setProjectOnly}
-                      />
+                      <p className="text-sm text-muted-foreground">
+                        Restrict answers to your documentation context.
+                      </p>
                     </div>
+                    <Switch
+                      id="new-project-only"
+                      checked={projectOnly}
+                      onCheckedChange={setProjectOnly}
+                    />
+                  </div>
+                  <Button
+                    onClick={handleCreateBot}
+                    disabled={isCreating}
+                    className="w-full mt-4"
+                  >
+                    {isCreating ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <PlusCircle className="mr-2 h-4 w-4" />
+                    )}
+                    Create Bot
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] lg:items-start gap-6">
+                {/* Column 1 (2fr): Assistant Settings & API Credentials */}
+                <div className="space-y-6">
+                  {/* Assistant Settings Card */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Assistant Settings</CardTitle>
+                      <CardDescription>
+                        Configure the behavior of your assistant.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      {/* Assistant Name */}
+                      <div className="space-y-2">
+                        <Label htmlFor="assistant-name">Assistant Name</Label>
+                        <Input
+                          id="assistant-name"
+                          value={assistantName}
+                          onChange={(e) => setAssistantName(e.target.value)}
+                          placeholder="My Documentation Bot"
+                        />
+                      </div>
 
-                    {/* Domain Restriction Switch */}
-                    <div className="flex items-center justify-between space-x-2 border p-4 rounded-md">
-                      <Label
-                        htmlFor="domain-restriction-switch"
-                        className="flex flex-col space-y-1"
-                      >
-                        <span>Restrict access by domain</span>
-                        <span className="font-normal leading-snug text-muted-foreground">
-                          Allow chat widget integration only from specified
-                          domains.
-                        </span>
-                      </Label>
-                      <Switch
-                        id="domain-restriction-switch"
-                        checked={isDomainRestrictionEnabled}
-                        onCheckedChange={handleDomainRestrictionToggle}
-                      />
-                    </div>
-
-                    {/* Allowed Domains Input/List (conditionally rendered) MOVED HERE */}
-                    {isDomainRestrictionEnabled && (
-                      <div className="space-y-4 pt-4 border-t border-border/40 mt-4">
-                        <Label className="flex items-center gap-2 text-sm font-medium">
-                          <Globe className="h-4 w-4 text-muted-foreground" />
-                          Allowed Domains
+                      {/* Project Only Switch */}
+                      <div className="flex items-center justify-between space-x-2 border p-4 rounded-md">
+                        <Label
+                          htmlFor="project-only-switch"
+                          className="flex flex-col space-y-1"
+                        >
+                          <span>Answer only project-related questions</span>
+                          <span className="font-normal leading-snug text-muted-foreground">
+                            Limit responses to the content of your uploaded
+                            documents.
+                          </span>
                         </Label>
-                        <p className="text-sm text-muted-foreground">
-                          Specify the domains where your chat widget can be
-                          embedded. Use * for wildcard subdomains (e.g.,
-                          *.example.com).
-                        </p>
-                        <div className="flex space-x-2">
+                        <Switch
+                          id="project-only-switch"
+                          checked={projectOnly}
+                          onCheckedChange={setProjectOnly}
+                        />
+                      </div>
+
+                      {/* Domain Restriction Switch */}
+                      <div className="flex items-center justify-between space-x-2 border p-4 rounded-md">
+                        <Label
+                          htmlFor="domain-restriction-switch"
+                          className="flex flex-col space-y-1"
+                        >
+                          <span>Restrict access by domain</span>
+                          <span className="font-normal leading-snug text-muted-foreground">
+                            Allow chat widget integration only from specified
+                            domains.
+                          </span>
+                        </Label>
+                        <Switch
+                          id="domain-restriction-switch"
+                          checked={isDomainRestrictionEnabled}
+                          onCheckedChange={handleDomainRestrictionToggle}
+                        />
+                      </div>
+
+                      {/* Allowed Domains Input/List (conditionally rendered) MOVED HERE */}
+                      {isDomainRestrictionEnabled && (
+                        <div className="space-y-4 pt-4 border-t border-border/40 mt-4">
+                          <Label className="flex items-center gap-2 text-sm font-medium">
+                            <Globe className="h-4 w-4 text-muted-foreground" />
+                            Allowed Domains
+                          </Label>
+                          <p className="text-sm text-muted-foreground">
+                            Specify the domains where your chat widget can be
+                            embedded. Use * for wildcard subdomains (e.g.,
+                            *.example.com).
+                          </p>
+                          <div className="flex space-x-2">
+                            <Input
+                              value={newOriginInput}
+                              onChange={(e) =>
+                                setNewOriginInput(e.target.value)
+                              }
+                              placeholder="e.g., https://example.com or *.myapp.com"
+                              className="h-9" // Adjusted height
+                            />
+                            <Button onClick={handleAddOrigin} size="sm">
+                              Add
+                            </Button>
+                          </div>
+                          {currentOrigins.length > 0 && (
+                            <ScrollArea className="max-h-32 w-full rounded-md border">
+                              <div className="p-4">
+                                <ul className="space-y-2">
+                                  {currentOrigins.map((origin) => (
+                                    <li
+                                      key={origin}
+                                      className="flex items-center justify-between text-sm bg-muted/50 p-2 rounded-md"
+                                    >
+                                      <span className="break-all font-mono">
+                                        {origin}
+                                      </span>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-6 w-6 shrink-0"
+                                        onClick={() =>
+                                          handleRemoveOrigin(origin)
+                                        }
+                                      >
+                                        <IconX className="h-4 w-4" />
+                                      </Button>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            </ScrollArea>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Save Button */}
+                      <div className="pt-4">
+                        <Button
+                          onClick={handleSaveSettings}
+                          disabled={isSaving}
+                        >
+                          {isSaving && (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          )}
+                          Save Settings
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* API Credentials Card (Moved to Column 1) */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>API Credentials</CardTitle>
+                      <CardDescription>
+                        Use these to integrate your bot.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="api-url">API URL</Label>
+                        <div className="flex">
                           <Input
-                            value={newOriginInput}
-                            onChange={(e) => setNewOriginInput(e.target.value)}
-                            placeholder="e.g., https://example.com or *.myapp.com"
-                            className="h-9" // Adjusted height
+                            id="api-url"
+                            value={`${
+                              process.env.NEXT_PUBLIC_BASE_URL || ""
+                            }/api/chat/${bot?.id ?? ""}`}
+                            readOnly
+                            className="rounded-r-none"
                           />
-                          <Button onClick={handleAddOrigin} size="sm">
-                            Add
+                          <Button
+                            variant="secondary"
+                            size="icon"
+                            className="rounded-l-none"
+                            onClick={() =>
+                              copyToClipboard(
+                                `${
+                                  process.env.NEXT_PUBLIC_BASE_URL || ""
+                                }/api/chat/${bot?.id}`
+                              )
+                            }
+                            disabled={!bot?.id}
+                          >
+                            <Copy className="h-4 w-4" />
                           </Button>
                         </div>
-                        {currentOrigins.length > 0 && (
-                          <ScrollArea className="max-h-32 w-full rounded-md border">
-                            <div className="p-4">
-                              <ul className="space-y-2">
-                                {currentOrigins.map((origin) => (
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="api-key">API Key</Label>
+                        <div className="flex">
+                          <Input
+                            id="api-key"
+                            value={
+                              showApiKey
+                                ? bot.api_key ?? "N/A"
+                                : "•".repeat(bot.api_key?.length ?? 3)
+                            }
+                            readOnly
+                            className="rounded-r-none font-mono"
+                            disabled={!bot.api_key}
+                          />
+                          <Button
+                            variant="secondary"
+                            size="icon"
+                            className="rounded-none border-x-0"
+                            onClick={() => setShowApiKey(!showApiKey)}
+                            disabled={!bot.api_key}
+                          >
+                            {showApiKey ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            size="icon"
+                            className="rounded-l-none"
+                            onClick={() => copyToClipboard(bot.api_key)}
+                            disabled={!bot.api_key}
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Keep this key secret. Use it server-side or in secure
+                          environments.
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Column 2 (1fr): Statistics and Documents */}
+                <div className="lg:col-span-1 space-y-6">
+                  {/* Usage Statistics Card (UPDATED) */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Usage Statistics</CardTitle>
+                      <CardDescription>
+                        Your current usage based on the '
+                        {profile?.subscriptions?.name ?? "Free"}' plan.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      {isLoadingStats ? (
+                        <div className="flex items-center justify-center text-muted-foreground py-4">
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />{" "}
+                          Loading statistics...
+                        </div>
+                      ) : statsError ? (
+                        <p className="text-sm text-red-600 text-center">
+                          {statsError}
+                        </p>
+                      ) : (
+                        <>
+                          {/* Storage Usage */}
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <Label
+                                htmlFor="storage-progress"
+                                className="flex items-center gap-2"
+                              >
+                                <Database className="h-4 w-4 text-muted-foreground" />
+                                Document Storage
+                              </Label>
+                              <span className="text-sm text-muted-foreground">
+                                {formatBytes(userStats.storageBytes)} /{" "}
+                                {formatBytes(limits.maxStorageBytes)}
+                              </span>
+                            </div>
+                            <Progress
+                              id="storage-progress"
+                              value={storagePercentage}
+                              className="h-2"
+                              aria-label={`Storage used ${storagePercentage.toFixed(
+                                0
+                              )}%`}
+                            />
+                          </div>
+                          {/* Requests Usage */}
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <Label
+                                htmlFor="requests-progress"
+                                className="flex items-center gap-2"
+                              >
+                                <Activity className="h-4 w-4 text-muted-foreground" />
+                                Monthly Requests
+                              </Label>
+                              <span className="text-sm text-muted-foreground">
+                                {userStats.queries} / {limits.maxQueries}
+                              </span>
+                            </div>
+                            <Progress
+                              id="requests-progress"
+                              value={requestsPercentage}
+                              className="h-2"
+                              aria-label={`Requests used ${requestsPercentage.toFixed(
+                                0
+                              )}%`}
+                            />
+                          </div>
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Documentation Files Card (Should be here, after stats) */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Documentation Files</CardTitle>
+                      <CardDescription>
+                        Manage documents for bot: {bot.name}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-8">
+                      {/* Document List with ScrollArea */}
+                      <div className="space-y-3">
+                        <h4 className="text-sm font-medium">
+                          Uploaded Documents
+                        </h4>
+                        <ScrollArea className="max-h-60 w-full rounded-md border">
+                          <div className="p-1">
+                            {isLoadingDocs ? (
+                              <div className="flex items-center justify-center text-muted-foreground py-4">
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />{" "}
+                                Loading documents...
+                              </div>
+                            ) : documents.length === 0 ? (
+                              <div className="flex items-center justify-center text-muted-foreground py-4">
+                                <p className="text-sm">
+                                  No documents uploaded yet.
+                                </p>
+                              </div>
+                            ) : (
+                              <ul className="divide-y divide-border">
+                                {documents.map((doc) => (
                                   <li
-                                    key={origin}
-                                    className="flex items-center justify-between text-sm bg-muted/50 p-2 rounded-md"
+                                    key={doc.id}
+                                    className="p-3 flex items-center justify-between gap-4 hover:bg-muted/50 transition-colors"
                                   >
-                                    <span className="break-all font-mono">
-                                      {origin}
-                                    </span>
+                                    <div className="flex items-center gap-3 overflow-hidden flex-1 min-w-0">
+                                      <FileText className="h-5 w-5 flex-shrink-0 text-muted-foreground" />
+                                      <div className="flex-grow overflow-hidden">
+                                        <p
+                                          className="text-sm font-medium truncate"
+                                          title={doc.file_name}
+                                        >
+                                          {doc.file_name}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground space-x-2">
+                                          <span>
+                                            {formatBytes(doc.file_size_bytes)}
+                                          </span>
+                                          <span>•</span>
+                                          <span>Status: {doc.status}</span>
+                                          <span>•</span>
+                                          <span>
+                                            Uploaded:{" "}
+                                            {new Date(
+                                              doc.uploaded_at
+                                            ).toLocaleDateString()}
+                                          </span>
+                                        </p>
+                                      </div>
+                                    </div>
                                     <Button
                                       variant="ghost"
                                       size="icon"
-                                      className="h-6 w-6 shrink-0"
-                                      onClick={() => handleRemoveOrigin(origin)}
+                                      onClick={() => handleDeleteDocument(doc)}
+                                      disabled={isDeletingDoc === doc.id}
+                                      aria-label="Delete document"
+                                      className="flex-shrink-0"
                                     >
-                                      <IconX className="h-4 w-4" />
+                                      {isDeletingDoc === doc.id ? (
+                                        <Loader2 className="h-4 w-4 animate-spin" />
+                                      ) : (
+                                        <Trash2 className="h-4 w-4 text-destructive hover:text-destructive/80" />
+                                      )}
                                     </Button>
                                   </li>
                                 ))}
                               </ul>
-                            </div>
-                          </ScrollArea>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Save Button */}
-                    <div className="pt-4">
-                      <Button onClick={handleSaveSettings} disabled={isSaving}>
-                        {isSaving && (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        )}
-                        Save Settings
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* API Credentials Card (Moved to Column 1) */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>API Credentials</CardTitle>
-                    <CardDescription>
-                      Use these to integrate your bot.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="api-url">API URL</Label>
-                      <div className="flex">
-                        <Input
-                          id="api-url"
-                          value={`${
-                            process.env.NEXT_PUBLIC_BASE_URL || ""
-                          }/api/chat/${bot?.id ?? ""}`}
-                          readOnly
-                          className="rounded-r-none"
-                        />
-                        <Button
-                          variant="secondary"
-                          size="icon"
-                          className="rounded-l-none"
-                          onClick={() =>
-                            copyToClipboard(
-                              `${
-                                process.env.NEXT_PUBLIC_BASE_URL || ""
-                              }/api/chat/${bot?.id}`
-                            )
-                          }
-                          disabled={!bot?.id}
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="api-key">API Key</Label>
-                      <div className="flex">
-                        <Input
-                          id="api-key"
-                          value={
-                            showApiKey
-                              ? bot.api_key ?? "N/A"
-                              : "•".repeat(bot.api_key?.length ?? 3)
-                          }
-                          readOnly
-                          className="rounded-r-none font-mono"
-                          disabled={!bot.api_key}
-                        />
-                        <Button
-                          variant="secondary"
-                          size="icon"
-                          className="rounded-none border-x-0"
-                          onClick={() => setShowApiKey(!showApiKey)}
-                          disabled={!bot.api_key}
-                        >
-                          {showApiKey ? (
-                            <EyeOff className="h-4 w-4" />
-                          ) : (
-                            <Eye className="h-4 w-4" />
-                          )}
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          size="icon"
-                          className="rounded-l-none"
-                          onClick={() => copyToClipboard(bot.api_key)}
-                          disabled={!bot.api_key}
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        Keep this key secret. Use it server-side or in secure
-                        environments.
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Column 2 (1fr): Documentation Files */}
-              <div className="lg:col-span-1 space-y-6">
-                {/* Usage Statistics Card (Should be here) */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Usage Statistics</CardTitle>
-                    <CardDescription>
-                      Your current usage based on the '
-                      {profile?.subscriptions?.name ?? "Free"}' plan.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    {/* Storage Usage */}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label
-                          htmlFor="storage-progress"
-                          className="flex items-center gap-2"
-                        >
-                          <Database className="h-4 w-4 text-muted-foreground" />
-                          Document Storage
-                        </Label>
-                        <span className="text-sm text-muted-foreground">
-                          {currentStorageUsedMB} MB / {maxStorageMB} MB
-                        </span>
-                      </div>
-                      <Progress
-                        id="storage-progress"
-                        value={storagePercentage}
-                        className="h-2"
-                      />
-                    </div>
-                    {/* Requests Usage */}
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label
-                          htmlFor="requests-progress"
-                          className="flex items-center gap-2"
-                        >
-                          <Activity className="h-4 w-4 text-muted-foreground" />
-                          Monthly Requests
-                        </Label>
-                        <span className="text-sm text-muted-foreground">
-                          {currentRequestsUsed} / {maxRequestsMonth}
-                        </span>
-                      </div>
-                      <Progress
-                        id="requests-progress"
-                        value={requestsPercentage}
-                        className="h-2"
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Documentation Files Card (Should be here, after stats) */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Documentation Files</CardTitle>
-                    <CardDescription>
-                      Manage documents for bot: {bot.name}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-8">
-                    {/* Document List with ScrollArea */}
-                    <div className="space-y-3">
-                      <h4 className="text-sm font-medium">
-                        Uploaded Documents
-                      </h4>
-                      <ScrollArea className="max-h-60 w-full rounded-md border">
-                        <div className="p-1">
-                          {isLoadingDocs ? (
-                            <div className="flex items-center justify-center text-muted-foreground py-4">
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />{" "}
-                              Loading documents...
-                            </div>
-                          ) : documents.length === 0 ? (
-                            <div className="flex items-center justify-center text-muted-foreground py-4">
-                              <p className="text-sm">
-                                No documents uploaded yet.
-                              </p>
-                            </div>
-                          ) : (
-                            <ul className="divide-y divide-border">
-                              {documents.map((doc) => (
-                                <li
-                                  key={doc.id}
-                                  className="p-3 flex items-center justify-between gap-4 hover:bg-muted/50 transition-colors"
-                                >
-                                  <div className="flex items-center gap-3 overflow-hidden flex-1 min-w-0">
-                                    <FileText className="h-5 w-5 flex-shrink-0 text-muted-foreground" />
-                                    <div className="flex-grow overflow-hidden">
-                                      <p
-                                        className="text-sm font-medium truncate"
-                                        title={doc.file_name}
-                                      >
-                                        {doc.file_name}
-                                      </p>
-                                      <p className="text-xs text-muted-foreground space-x-2">
-                                        <span>
-                                          {formatBytes(doc.file_size_bytes)}
-                                        </span>
-                                        <span>•</span>
-                                        <span>Status: {doc.status}</span>
-                                        <span>•</span>
-                                        <span>
-                                          Uploaded:{" "}
-                                          {new Date(
-                                            doc.uploaded_at
-                                          ).toLocaleDateString()}
-                                        </span>
-                                      </p>
-                                    </div>
-                                  </div>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => handleDeleteDocument(doc)}
-                                    disabled={isDeletingDoc === doc.id}
-                                    aria-label="Delete document"
-                                    className="flex-shrink-0"
-                                  >
-                                    {isDeletingDoc === doc.id ? (
-                                      <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                      <Trash2 className="h-4 w-4 text-destructive hover:text-destructive/80" />
-                                    )}
-                                  </Button>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      </ScrollArea>
-                    </div>
-
-                    {/* Upload Area */}
-                    <div className="border-2 border-dashed border-muted rounded-lg p-6 text-center">
-                      <input
-                        type="file"
-                        ref={fileInputRef}
-                        onChange={handleFileSelect}
-                        accept=".pdf,.docx,.txt" // Ограничиваем типы файлов
-                        className="hidden" // Скрываем стандартный инпут
-                        id="file-upload"
-                      />
-                      {/* Показываем кнопку выбора, если файл не выбран */}
-                      {!selectedFile && (
-                        <Button
-                          variant="outline"
-                          onClick={() => fileInputRef.current?.click()}
-                        >
-                          <Upload className="mr-2 h-4 w-4" /> Select File
-                        </Button>
-                      )}
-                      {/* Показываем информацию о файле и кнопки управления, если файл выбран */}
-                      {selectedFile && (
-                        <div className="mt-4 text-sm text-muted-foreground flex flex-col items-center gap-2">
-                          <p>
-                            {selectedFile.name} (
-                            {(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
-                          </p>
-                          <div className="flex gap-2 mt-2">
-                            <Button
-                              onClick={handleFileUpload}
-                              disabled={isUploading}
-                            >
-                              {isUploading ? (
-                                <>
-                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />{" "}
-                                  Uploading...
-                                </>
-                              ) : (
-                                <Upload className="mr-2 h-4 w-4" /> +
-                                "Confirm Upload"
-                              )}
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedFile(null);
-                                if (fileInputRef.current)
-                                  fileInputRef.current.value = "";
-                              }}
-                              disabled={isUploading}
-                            >
-                              Cancel
-                            </Button>
+                            )}
                           </div>
-                        </div>
-                      )}
-                      {/* Показываем ошибку загрузки, если она есть */}
-                      {uploadError && (
-                        <p className="mt-4 text-sm text-red-600">
-                          {uploadError}
+                        </ScrollArea>
+                      </div>
+
+                      {/* Upload Area */}
+                      <div className="border-2 border-dashed border-muted rounded-lg p-6 text-center">
+                        <input
+                          type="file"
+                          ref={fileInputRef}
+                          onChange={handleFileSelect}
+                          accept=".pdf,application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.txt,text/plain,.md,text/markdown"
+                          className="hidden" // Скрываем стандартный инпут
+                          id="file-upload"
+                        />
+                        {/* Показываем кнопку выбора, если файл не выбран */}
+                        {!selectedFile && (
+                          <Button
+                            variant="outline"
+                            onClick={() => fileInputRef.current?.click()}
+                          >
+                            <Upload className="mr-2 h-4 w-4" /> Select File
+                          </Button>
+                        )}
+                        {/* Показываем информацию о файле и кнопки управления, если файл выбран */}
+                        {selectedFile && (
+                          <div className="mt-4 text-sm text-muted-foreground flex flex-col items-center gap-2">
+                            <p>
+                              {selectedFile.name} (
+                              {(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
+                            </p>
+                            <div className="flex gap-2 mt-2">
+                              <Button
+                                onClick={handleFileUpload}
+                                disabled={isUploading}
+                              >
+                                {isUploading ? (
+                                  <>
+                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />{" "}
+                                    Uploading...
+                                  </>
+                                ) : (
+                                  <Upload className="mr-2 h-4 w-4" /> +
+                                  "Confirm Upload"
+                                )}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedFile(null);
+                                  if (fileInputRef.current)
+                                    fileInputRef.current.value = "";
+                                }}
+                                disabled={isUploading}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                        {/* Показываем ошибку загрузки, если она есть */}
+                        {uploadError && (
+                          <p className="mt-4 text-sm text-red-600">
+                            {uploadError}
+                          </p>
+                        )}
+                        {/* Информация о поддерживаемых форматах */}
+                        <p className="mt-4 text-xs text-muted-foreground">
+                          Supported formats: PDF, DOCX, TXT. Max size: 10MB
+                          (example).
                         </p>
-                      )}
-                      {/* Информация о поддерживаемых форматах */}
-                      <p className="mt-4 text-xs text-muted-foreground">
-                        Supported formats: PDF, DOCX, TXT. Max size: 10MB
-                        (example).
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
               </div>
-            </div>
-          )}
-        </TabsContent>
+            )}
+          </TabsContent>
 
-        {/* Documentation Tab */}
-        <TabsContent value="docs">
-          {/* Content moved from original page, uses bot data if available */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Quick Start Guide</CardTitle>
-              <CardDescription>
-                Integrate your bot ({bot?.name ?? "Your Bot"}) into a React app
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div>
-                <h3 className="text-lg font-medium mb-2">
-                  1. Install the package
-                </h3>
-                <CodeBlock code="npm install doctalkie-react" language="bash" />
-              </div>
+          {/* Documentation Tab */}
+          <TabsContent value="docs">
+            {/* Content moved from original page, uses bot data if available */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Quick Start Guide</CardTitle>
+                <CardDescription>
+                  Integrate your bot ({bot?.name ?? "Your Bot"}) into a React
+                  app
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-medium mb-2">
+                    1. Install the package
+                  </h3>
+                  <CodeBlock
+                    code="npm install doctalkie-react"
+                    language="bash"
+                  />
+                </div>
 
-              <div>
-                <h3 className="text-lg font-medium mb-2">
-                  2. Import the component
-                </h3>
-                <CodeBlock
-                  code="import { DocTalkieChat } from 'doctalkie-react'"
-                  language="jsx"
-                />
-              </div>
+                <div>
+                  <h3 className="text-lg font-medium mb-2">
+                    2. Import the component
+                  </h3>
+                  <CodeBlock
+                    code="import { DocTalkieChat } from 'doctalkie-react'"
+                    language="jsx"
+                  />
+                </div>
 
-              <div>
-                <h3 className="text-lg font-medium mb-2">
-                  3. Add the component to your app
-                </h3>
-                <CodeBlock
-                  code={`import { DocTalkieChat } from 'doctalkie-react'
+                <div>
+                  <h3 className="text-lg font-medium mb-2">
+                    3. Add the component to your app
+                  </h3>
+                  <CodeBlock
+                    code={`import { DocTalkieChat } from 'doctalkie-react'
 
 export default function App() {
   return (
@@ -940,61 +1057,61 @@ export default function App() {
       <h1>My Awesome App</h1>
       <DocTalkieChat 
         apiURL="${process.env.NEXT_PUBLIC_BASE_URL}/api/chat/${
-                    bot?.id ?? "{YOUR_BOT_ID}"
-                  }"
+                      bot?.id ?? "{YOUR_BOT_ID}"
+                    }"
         apiKey="${bot?.api_key ?? "{YOUR_API_KEY}"}"
         // Optional props...
       />
     </div>
   )
 }`}
-                  language="jsx"
-                  showLineNumbers
-                />
-              </div>
-              {/* ... rest of Quick Start ... */}
-            </CardContent>
-          </Card>
+                    language="jsx"
+                    showLineNumbers
+                  />
+                </div>
+                {/* ... rest of Quick Start ... */}
+              </CardContent>
+            </Card>
 
-          {/* Integration Examples Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Integrate Your Bot</CardTitle>
-              <CardDescription>
-                Use these snippets to integrate the chat widget.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Tabs defaultValue="javascript">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="javascript">JavaScript</TabsTrigger>
-                  <TabsTrigger value="react">React</TabsTrigger>
-                </TabsList>
-                <TabsContent value="javascript">
-                  <CodeBlock
-                    language="html"
-                    code={`<!-- Include this script tag in your HTML -->
+            {/* Integration Examples Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Integrate Your Bot</CardTitle>
+                <CardDescription>
+                  Use these snippets to integrate the chat widget.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Tabs defaultValue="javascript">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="javascript">JavaScript</TabsTrigger>
+                    <TabsTrigger value="react">React</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="javascript">
+                    <CodeBlock
+                      language="html"
+                      code={`<!-- Include this script tag in your HTML -->
 <script 
   src="${process.env.NEXT_PUBLIC_BASE_URL || ""}/widget.js" 
   data-api-url="${process.env.NEXT_PUBLIC_BASE_URL || ""}/api/chat/${
-                      bot?.id ?? "{YOUR_BOT_ID}"
-                    }" 
+                        bot?.id ?? "{YOUR_BOT_ID}"
+                      }" 
   data-api-key="${bot?.api_key ?? "{YOUR_API_KEY}"}" 
   defer
 ></script>`}
-                  />
-                </TabsContent>
-                <TabsContent value="react">
-                  <CodeBlock
-                    language="jsx"
-                    code={`import DocTalkieChat from '@/components/doc-talkie-chat'; // Adjust import path
+                    />
+                  </TabsContent>
+                  <TabsContent value="react">
+                    <CodeBlock
+                      language="jsx"
+                      code={`import DocTalkieChat from '@/components/doc-talkie-chat'; // Adjust import path
 
 function MyComponent() {
   return (
     <DocTalkieChat 
       apiURL="${process.env.NEXT_PUBLIC_BASE_URL || ""}/api/chat/${
-                      bot?.id ?? "{YOUR_BOT_ID}"
-                    }"
+                        bot?.id ?? "{YOUR_BOT_ID}"
+                      }"
       apiKey="${bot?.api_key ?? "{YOUR_API_KEY}"}"
       // Optional props
       // theme="light" 
@@ -1002,35 +1119,42 @@ function MyComponent() {
     />
   );
 }`}
-                  />
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                    />
+                  </TabsContent>
+                </Tabs>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-        {/* Analytics Tab */}
-        <TabsContent value="analytics">
-          <Card>
-            <CardHeader>
-              <CardTitle>Usage Analytics</CardTitle>
-              <CardDescription>
-                View statistics for: {bot?.name ?? "Your Bot"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <p className="text-muted-foreground mb-4">
-                  Analytics are coming soon.
-                </p>
-                <Button variant="outline" disabled>
-                  Refresh Data
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-    </div>
+          {/* Analytics Tab */}
+          <TabsContent value="analytics">
+            <Card>
+              <CardHeader>
+                <CardTitle>Usage Analytics</CardTitle>
+                <CardDescription>
+                  View statistics for: {bot?.name ?? "Your Bot"}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <p className="text-muted-foreground mb-4">
+                    Analytics are coming soon.
+                  </p>
+                  <Button variant="outline" disabled>
+                    Refresh Data
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
+      {/* ДОБАВЛЯЕМ ЧАТ-ВИДЖЕТ ЗДЕСЬ */}
+      <DocTalkieChat
+        apiURL="http://localhost:3000/api/chat/a6ef5aab-2722-4736-b699-d68c4e38ae1a" // TODO: Использовать динамический URL из состояния bot?
+        apiKey="dt_4a8b0aa6-bbe6-468b-a3eb-fe4f1e46297e" // TODO: Использовать динамический ключ из состояния bot?
+        theme="doctalkie"
+      />
+    </>
   );
 }
