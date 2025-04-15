@@ -233,10 +233,6 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
-  // Добавим лог
-  console.log(
-    `[POST /api/chat] Extracted assistantId from URL: ${assistantId}`
-  );
 
   // Проверка Authorization Header
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -292,18 +288,16 @@ export async function POST(req: NextRequest) {
     // Шаг 3.5: Вызов LLM
     const answer = await callGroqApi(prompt);
 
-    // Шаг 3.7: Обновление статистики запросов пользователя (ДОБАВЛЕНО)
+    // Шаг 3.7: Обновление статистики запросов пользователя
     const { error: userQueryStatError } = await supabaseAdmin.rpc(
-      "increment_user_queries", // Вызываем созданную функцию
-      { user_id_param: assistant.user_id } // Передаем ID пользователя из данных ассистента
+      "increment_user_queries",
+      { user_id_param: assistant.user_id }
     );
-
     if (userQueryStatError) {
       console.warn(
-        `Failed to update query count statistics for user ${assistant.user_id}:`,
+        `[POST /api/chat] Failed to update query count statistics for user ${assistant.user_id}:`,
         userQueryStatError
       );
-      // Не прерываем процесс, если обновление статистики не удалось, но логируем предупреждение
     }
 
     // Шаг 3.8: Отправка ответа

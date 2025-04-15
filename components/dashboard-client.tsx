@@ -160,10 +160,6 @@ export default function DashboardClient({
         .eq("id", user.id)
         .single();
 
-      // ЛОГИРУЕМ ПОЛУЧЕННЫЕ ДАННЫЕ
-      console.log("[fetchUserStatsAndLimits] Fetched userData:", userData);
-      console.log("[fetchUserStatsAndLimits] Fetched userError:", userError);
-
       if (userError)
         throw new Error(
           `Failed to fetch user statistics: ${userError.message}`
@@ -173,9 +169,6 @@ export default function DashboardClient({
       // Обновляем текущее использование
       const currentQueries = userData.total_queries ?? 0;
       const currentStorageBytes = userData.total_storage_usage_bytes ?? 0;
-      console.log(
-        `[fetchUserStatsAndLimits] Setting stats - Queries: ${currentQueries}, Storage Bytes: ${currentStorageBytes}`
-      ); // ЛОГ ПЕРЕД УСТАНОВКОЙ СОСТОЯНИЯ
       setUserStats({
         queries: currentQueries,
         storageBytes: currentStorageBytes,
@@ -191,7 +184,7 @@ export default function DashboardClient({
           .single();
         if (subError) {
           console.warn(
-            `Failed to fetch subscription details for ${userData.subscription_id}: ${subError.message}. Using default limits.`
+            `[DashboardClient] Failed to fetch subscription details for ${userData.subscription_id}: ${subError.message}. Using default limits.`
           );
         } else if (subData) {
           currentLimits = {
@@ -199,12 +192,10 @@ export default function DashboardClient({
             maxStorageBytes: (subData.max_total_doc_size_mb ?? 5) * 1024 * 1024,
           };
         }
-      } else {
-        console.log("User has no subscription_id, using default limits.");
       }
       setLimits(currentLimits);
     } catch (error) {
-      console.error("Error loading usage statistics:", error);
+      console.error("[DashboardClient] Error loading usage statistics:", error);
       setStatsError(
         error instanceof Error ? error.message : "Failed to load statistics."
       );
@@ -213,7 +204,7 @@ export default function DashboardClient({
     } finally {
       setIsLoadingStats(false);
     }
-  }, [user, supabase]); // Зависимости useCallback
+  }, [user, supabase]);
 
   // useEffect для загрузки статистики при монтировании
   useEffect(() => {

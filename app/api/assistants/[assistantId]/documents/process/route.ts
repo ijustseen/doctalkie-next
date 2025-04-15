@@ -92,9 +92,6 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
-  console.log(
-    `[documents/process] Extracted assistantId from URL: ${assistantId}`
-  );
 
   // --- Проверка авторизации пользователя ---
   const {
@@ -200,9 +197,6 @@ export async function POST(req: NextRequest) {
       fileName.toLowerCase().endsWith(".md")
     ) {
       // Обработка .md файла, который пришел с неправильным MIME типом
-      console.log(
-        `Treating file ${fileName} with type ${file.type} as markdown based on extension.`
-      );
       extractedText = fileBuffer.toString("utf-8");
     } else {
       console.warn(
@@ -227,8 +221,7 @@ export async function POST(req: NextRequest) {
 
     // --- Сохранение в базу данных ---
     try {
-      // 1. Запись информации о документе в таблицу 'documents'
-      console.log(`[${fileName}] Attempting to insert document record...`);
+      // 1. Запись информации о документе
       const { data: documentRecord, error: docError } = await supabase
         .from("documents")
         .insert({
@@ -236,55 +229,43 @@ export async function POST(req: NextRequest) {
           file_name: fileName,
           file_size_bytes: file.size,
           status: "processing",
-          storage_path: "", // Оставляем пустым, если не загружаем в Storage
+          storage_path: "",
         })
         .select("id")
         .single();
-
       if (docError) {
         console.error(
-          `[${fileName}] Error inserting document record:`,
+          `[documents/process] Error inserting document record for ${fileName}:`,
           docError
         );
         throw new Error(
           `Database error while saving document metadata: ${docError.message}`
         );
       }
-      console.log(
-        `[${fileName}] Document record inserted, ID: ${documentRecord.id}`
-      );
-      const documentId = documentRecord.id; // Используем ID дальше
+      const documentId = documentRecord.id;
 
-      // 2. Подготовка записей чанков для вставки
+      // 2. Подготовка чанков
       const chunkRecords = chunks.map((chunkText, index) => ({
         document_id: documentId,
         bot_id: assistantId,
         content: chunkText,
         chunk_index: index,
       }));
-      console.log(
-        `[${fileName}] Prepared ${chunkRecords.length} chunk records.`
-      );
 
-      // 3. Вставка чанков в таблицу 'document_chunks'
-      console.log(`[${fileName}] Attempting to insert chunks...`);
+      // 3. Вставка чанков
       const { error: chunkError } = await supabase
         .from("document_chunks")
         .insert(chunkRecords);
-
       if (chunkError) {
         console.error(
-          `[${fileName}] Error inserting document chunks:`,
+          `[documents/process] Error inserting document chunks for ${fileName}:`,
           chunkError
         );
         try {
           await supabase.from("documents").delete().eq("id", documentId);
-          console.log(
-            `[${fileName}] Rolled back document record insertion due to chunk error.`
-          );
         } catch (rollbackError) {
           console.error(
-            `[${fileName}] Failed to rollback document record:`,
+            `[documents/process] Failed to rollback document record for ${fileName}:`,
             rollbackError
           );
         }
@@ -292,12 +273,8 @@ export async function POST(req: NextRequest) {
           `Database error while saving document content: ${chunkError.message}`
         );
       }
-      console.log(`[${fileName}] Chunks inserted successfully.`);
 
-      // 4. Обновление статуса документа в 'documents' на 'ready' и установка processed_at
-      console.log(
-        `[${fileName}] Attempting to update document status to 'ready'...`
-      );
+      // 4. Обновление статуса документа
       const { error: updateError } = await supabase
         .from("documents")
         .update({
@@ -305,36 +282,27 @@ export async function POST(req: NextRequest) {
           processed_at: new Date().toISOString(),
         })
         .eq("id", documentId);
-
       if (updateError) {
         console.warn(
-          `[${fileName}] Failed to update document status to ready for doc ${documentId}:`,
+          `[documents/process] Failed to update document status to ready for doc ${documentId}:`,
           updateError
         );
-      } else {
-        console.log(`[${fileName}] Document status updated to 'ready'.`);
       }
 
-      // 5. Обновление статистики использования хранилища пользователя (ИСПОЛЬЗУЕМ ОБЫЧНЫЙ КЛИЕНТ)
-      console.log(
-        `[${fileName}] Updating user storage stats via supabase-js client...`
-      );
+      // 5. Обновление статистики хранилища (через supabase-js)
       try {
-        // СОЗДАЕМ ОТДЕЛЬНЫЙ КЛИЕНТ ДЛЯ ЭТОЙ ОПЕРАЦИИ
         const supabaseJsAdmin = createSupabaseJsClient(
           supabaseUrl,
           supabaseServiceKey
         );
-
         const { data: currentData, error: selectError } = await supabaseJsAdmin
           .from("users")
           .select("total_storage_usage_bytes")
           .eq("id", user.id)
           .single();
-
         if (selectError) {
           console.error(
-            `[${fileName}] Error fetching current storage bytes (supabase-js):`,
+            `[documents/process] Error fetching current storage bytes (supabase-js) for ${user.id}:`,
             selectError
           );
           throw new Error(
@@ -343,7 +311,7 @@ export async function POST(req: NextRequest) {
         }
         if (!currentData) {
           console.error(
-            `[${fileName}] User not found when fetching current storage bytes (supabase-js)`
+            `[documents/process] User not found when fetching storage bytes (supabase-js) for ${user.id}`
           );
           throw new Error(
             "User not found for storage stats update (supabase-js)."
@@ -352,41 +320,29 @@ export async function POST(req: NextRequest) {
         const currentBytes = currentData.total_storage_usage_bytes ?? 0;
         const bytesToAdd = file.size;
         const newTotalBytes = currentBytes + bytesToAdd;
-        console.log(
-          `[${fileName}] (supabase-js) Current bytes: ${currentBytes}, Adding: ${bytesToAdd}, New total: ${newTotalBytes}`
-        );
-
         const { error: updateStatsError } = await supabaseJsAdmin
           .from("users")
           .update({ total_storage_usage_bytes: newTotalBytes })
           .eq("id", user.id);
-
         if (updateStatsError) {
           console.error(
-            `[${fileName}] Error updating storage bytes (supabase-js):`,
+            `[documents/process] Error updating storage bytes (supabase-js) for ${user.id}:`,
             updateStatsError
           );
           console.warn(
-            `[${fileName}] Failed to update user storage statistics (supabase-js).`
-          );
-        } else {
-          console.log(
-            `[${fileName}] User storage stats updated successfully via UPDATE (supabase-js).`
+            `[documents/process] Failed to update user storage statistics (supabase-js).`
           );
         }
       } catch (statsUpdateError) {
         console.error(
-          `[${fileName}] Exception during storage stats update (supabase-js):`,
+          `[documents/process] Exception during storage stats update (supabase-js) for ${user.id}:`,
           statsUpdateError
         );
         console.warn(
-          `[${fileName}] Failed to update user storage statistics due to exception (supabase-js).`
+          `[documents/process] Failed to update user storage statistics due to exception (supabase-js).`
         );
       }
 
-      console.log(
-        `[${fileName}] Successfully processed and saved document and chunks.`
-      );
       return NextResponse.json({
         success: true,
         message: `Processed ${fileName}`,
@@ -395,7 +351,7 @@ export async function POST(req: NextRequest) {
       });
     } catch (dbError) {
       console.error(
-        `[${fileName}] Database operation failed during processing:`,
+        `[documents/process] Database operation failed during processing for ${fileName}:`,
         dbError
       );
       return NextResponse.json(
@@ -408,7 +364,10 @@ export async function POST(req: NextRequest) {
       );
     }
   } catch (processingError) {
-    console.error(`[${fileName}] Error processing file:`, processingError);
+    console.error(
+      `[documents/process] Error processing file ${fileName}:`,
+      processingError
+    );
     return NextResponse.json(
       {
         error: `Failed to process file: ${

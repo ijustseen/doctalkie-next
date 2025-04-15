@@ -15,9 +15,7 @@ if (supabaseUrl && supabaseServiceKey) {
 }
 // --- Конец Инициализации ---
 
-export async function GET(
-  req: NextRequest // <-- Убираем { params } отсюда
-) {
+export async function GET(req: NextRequest) {
   // 1. Проверка инициализации Supabase
   if (!supabaseAdmin) {
     console.error("[getName Route] Supabase client not initialized.");
@@ -51,8 +49,6 @@ export async function GET(
       { status: 400 }
     );
   }
-  // Добавим лог для проверки
-  console.log(`[getName Route] Extracted assistantId from URL: ${assistantId}`);
 
   // 3. Запрос имени бота из БД (используем извлеченный assistantId)
   try {
