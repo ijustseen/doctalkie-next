@@ -34,6 +34,7 @@ export async function POST(
     error: userError,
   } = await supabase.auth.getUser();
   if (userError || !user) {
+    // console.error("Unauthorized: User not found", userError); // Можно добавить детали ошибки
     return NextResponse.json(
       { error: "Unauthorized: User not found" },
       { status: 401 }
@@ -49,13 +50,14 @@ export async function POST(
     .maybeSingle(); // Используем maybeSingle, чтобы не было ошибки, если не найдено
 
   if (ownerError) {
-    console.error("Error checking bot ownership:", ownerError);
+    console.error("Error checking bot ownership:", ownerError); // Оставляем ошибку
     return NextResponse.json(
       { error: "Failed to verify bot ownership" },
       { status: 500 }
     );
   }
   if (!botOwner) {
+    // console.warn(`Attempt to access bot ${assistantId} by user ${user.id}`); // Можно добавить деталей
     return NextResponse.json(
       { error: "Unauthorized: Assistant not found or does not belong to user" },
       { status: 403 }
@@ -74,7 +76,7 @@ export async function POST(
     file = fileData as File;
     fileName = file.name;
   } catch (e) {
-    console.error("Error parsing form data:", e);
+    console.error("Error parsing form data:", e); // Оставляем ошибку
     return NextResponse.json(
       { error: "Invalid form data or file missing" },
       { status: 400 }
@@ -82,10 +84,11 @@ export async function POST(
   }
 
   if (!file) {
+    // Эта проверка может быть избыточной из-за try/catch выше, но оставим для ясности
     return NextResponse.json({ error: "File is required" }, { status: 400 });
   }
 
-  console.log(`Processing file: ${fileName} for assistant: ${assistantId}`);
+  console.log(`Processing file: ${fileName} for assistant: ${assistantId}`); // Оставляем основной лог начала
 
   let extractedText = "";
   try {
@@ -94,12 +97,11 @@ export async function POST(
     // Извлечение текста в зависимости от типа файла
     if (file.type === "application/pdf") {
       try {
-        // Динамический импорт pdf-parse только при необходимости
         const pdfParse = (await import("pdf-parse")).default;
-        const data = await pdfParse(fileBuffer, {}); // Используем пустые опции
+        const data = await pdfParse(fileBuffer, {});
         extractedText = data.text;
       } catch (pdfError) {
-        console.error("Error during PDF processing:", pdfError);
+        console.error("Error during PDF processing:", pdfError); // Оставляем ошибку
         throw new Error(
           `Failed to extract text from PDF: ${
             pdfError instanceof Error ? pdfError.message : String(pdfError)
@@ -115,8 +117,7 @@ export async function POST(
         const result = await mammoth.extractRawText({ buffer: fileBuffer });
         extractedText = result.value;
       } catch (docxError) {
-        console.error("Error during Mammoth processing:", docxError);
-        // Устанавливаем текст ошибки, чтобы он мог быть возвращен пользователю
+        console.error("Error during Mammoth processing:", docxError); // Оставляем ошибку
         throw new Error(
           `Failed to extract text from DOCX: ${
             docxError instanceof Error ? docxError.message : String(docxError)
@@ -128,14 +129,14 @@ export async function POST(
       extractedText = fileBuffer.toString("utf-8");
     } else if (file.type === "text/markdown") {
       // MARKDOWN
-      extractedText = fileBuffer.toString("utf-8"); // Обрабатываем как обычный текст
+      extractedText = fileBuffer.toString("utf-8");
     } else {
-      console.warn(`Unsupported file type received: ${file.type}`);
+      console.warn(`Unsupported file type received: ${file.type}`); // Оставляем предупреждение
       return NextResponse.json(
         {
           error: `Unsupported file type: ${file.type}. Supported types: PDF, DOCX, TXT, MD`,
-        }, // Обновляем сообщение об ошибке
-        { status: 415 } // 415 Unsupported Media Type
+        },
+        { status: 415 }
       );
     }
 
@@ -146,33 +147,28 @@ export async function POST(
     }
 
     // --- Чанкинг текста ---
-    const chunks = simpleChunker(extractedText); // Используем простой чанкер
+    const chunks = simpleChunker(extractedText);
 
     // --- Сохранение в базу данных ---
-    // ВАЖНО: Обязательно используйте транзакцию Supabase (`supabase.rpc(...)`),
-    // чтобы гарантировать атомарность записи в documents и document_chunks.
     try {
-      // Начало "псевдо-транзакции" (реальную транзакцию лучше через RPC)
-
       // 1. Запись информации о документе в таблицу 'documents'
       const { data: documentRecord, error: docError } = await supabase
-        .from("documents") // <-- Убедитесь, что имя таблицы правильное
+        .from("documents")
         .insert({
           bot_id: assistantId,
           file_name: fileName,
           file_size_bytes: file.size,
-          status: "processing", // Начальный статус
-          storage_path: "", // ИЗМЕНЕНО: Вставляем пустую строку вместо null
-          // uploaded_at: Поле обычно устанавливается БД по умолчанию
+          status: "processing",
+          storage_path: "",
         })
-        .select("id") // Выбираем только ID созданной записи
+        .select("id")
         .single();
 
       if (docError) {
         console.error(
           `Error inserting document record for ${fileName}:`,
           docError
-        );
+        ); // Оставляем ошибку
         throw new Error(
           `Database error while saving document metadata: ${docError.message}`
         );
@@ -181,11 +177,11 @@ export async function POST(
       if (!documentRecord || !documentRecord.id) {
         throw new Error("Failed to retrieve document ID after insert.");
       }
-      const documentId = documentRecord.id; // Получаем РЕАЛЬНЫЙ ID
+      const documentId = documentRecord.id;
 
       // 2. Подготовка записей чанков для вставки
       const chunkRecords = chunks.map((chunkText, index) => ({
-        document_id: documentId, // Используем реальный ID документа
+        document_id: documentId,
         bot_id: assistantId,
         content: chunkText,
         chunk_index: index,
@@ -200,8 +196,7 @@ export async function POST(
         console.error(
           `Error inserting document chunks for document ${documentId}:`,
           chunkError
-        );
-        // В реальной транзакции здесь был бы откат
+        ); // Оставляем ошибку
         throw new Error(
           `Database error while saving document content: ${chunkError.message}`
         );
@@ -212,7 +207,7 @@ export async function POST(
         .from("documents")
         .update({
           status: "ready",
-          processed_at: new Date().toISOString(), // Устанавливаем время обработки
+          processed_at: new Date().toISOString(),
         })
         .eq("id", documentId);
 
@@ -220,15 +215,13 @@ export async function POST(
         console.warn(
           `Failed to update document ${documentId} status to ready:`,
           updateError
-        );
-        // Не критично, но стоит залогировать
+        ); // Оставляем предупреждение
       }
-      // Конец "псевдо-транзакции"
 
       console.log(
         "Successfully processed and saved document and chunks for",
         fileName
-      );
+      ); // Оставляем итоговый лог успеха
       return NextResponse.json({
         success: true,
         message: `Processed ${fileName}`,
@@ -240,10 +233,7 @@ export async function POST(
       console.error(
         `Database operation failed during processing ${fileName}:`,
         dbError
-      );
-      // В реальной транзакции здесь был бы откат
-      // Попытаться обновить статус документа на 'error'?
-      // const { error: statusUpdateError } = await supabase.from('documents').update({ status: 'error' }).eq('id', documentId); // Осторожно, documentId может быть не определен
+      ); // Оставляем ошибку
       return NextResponse.json(
         {
           error: `Database error during processing: ${
@@ -255,7 +245,7 @@ export async function POST(
     }
   } catch (processingError) {
     // Обработка ошибок парсинга файла или других ошибок до БД
-    console.error(`Error processing file ${fileName}:`, processingError);
+    console.error(`Error processing file ${fileName}:`, processingError); // Оставляем ошибку
     return NextResponse.json(
       {
         error: `Failed to process file: ${

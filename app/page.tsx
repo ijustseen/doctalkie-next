@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import ChatWidget from "@/components/doc-talkie-chat/doc-talkie-chat";
+import DocTalkieChat from "@/components/doc-talkie-chat/doc-talkie-chat";
 import CodeBlock from "@/components/code-block";
 import { ArrowRight, CheckCircle2, Code, FileText, Zap } from "lucide-react";
 
@@ -270,12 +270,10 @@ export default function Home() {
         </div>
       </section>
 
-      <ChatWidget
+      <DocTalkieChat
         apiURL="http://localhost:3000/api/chat/a6ef5aab-2722-4736-b699-d68c4e38ae1a"
         apiKey="dt_4a8b0aa6-bbe6-468b-a3eb-fe4f1e46297e"
-        accentColor="hsl(var(--primary))"
         theme="doctalkie"
-        position="bottom-right"
       />
     </>
   );

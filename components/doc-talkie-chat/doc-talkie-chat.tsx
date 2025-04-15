@@ -28,7 +28,7 @@ interface DocTalkieChatProps {
 export default function DocTalkieChat({
   apiURL,
   apiKey,
-  theme = "doctalkie", // Default to doctalkie theme
+  theme = "dark", // Default to doctalkie theme
   accentColor, // Optional accent color
   position = "bottom-right",
   welcomeMessage = "Hi there! How can I help you today?",

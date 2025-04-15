@@ -72,7 +72,6 @@ async function authenticateAndGetAssistant(id: string, apiKey: string) {
 async function fetchFullDocumentContext(assistantId: string): Promise<string> {
   if (!supabaseAdmin) throw new Error("Supabase client not initialized");
 
-  console.log(`Fetching all document content for assistant ${assistantId}...`);
   const { data: chunks, error } = await supabaseAdmin
     .from("document_chunks")
     .select("content")
@@ -92,9 +91,6 @@ async function fetchFullDocumentContext(assistantId: string): Promise<string> {
   }
 
   const fullContext = chunks.map((chunk) => chunk.content).join("\n\n");
-  console.log(
-    `Total context length for assistant ${assistantId}: ${fullContext.length} characters`
-  );
   return fullContext;
 }
 
@@ -146,12 +142,9 @@ function generateLlmPrompt(
 async function callGroqApi(prompt: string): Promise<string> {
   if (!groq) throw new Error("Groq client not initialized");
 
-  // Обновленный системный промпт: язык ответа + формат кода с указанием языка
+  // Обновленный системный промпт: строго требуем отвечать на языке пользователя
   const systemMessageContent = `You are a helpful assistant. Your response MUST be strictly in the same language as the user\'s original question/query. When providing code snippets, always enclose them in triple backticks, specifying the language after the opening backticks (e.g., \\\`\\\`\\\`javascript).`;
 
-  console.log(
-    "Calling Groq LLM with System Prompt... (Language: strictly same as user query, Code format: ```language)"
-  );
   try {
     const chatCompletion = await groq.chat.completions.create({
       messages: [
@@ -170,10 +163,6 @@ async function callGroqApi(prompt: string): Promise<string> {
       top_p: 1,
       stream: false,
     });
-
-    // --- ЛОГИРОВАНИЕ ОТВЕТА GROQ (можно удалить, если больше не нужно) ---
-    // console.log("Groq API Response:", JSON.stringify(chatCompletion, null, 2));
-    // --- КОНЕЦ ЛОГИРОВАНИЯ ---
 
     const answer =
       chatCompletion.choices[0]?.message?.content ||
