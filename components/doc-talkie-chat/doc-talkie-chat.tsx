@@ -6,7 +6,7 @@ import TextareaAutosize from "react-textarea-autosize";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useDocTalkie, type Message } from "./use-doc-talkie";
-import { cn } from "@/lib/utils";
+import "./doc-talkie-chat.css";
 
 // Define SVG Icons directly in the component
 const IconMessageCircle = (props: React.SVGProps<SVGSVGElement>) => (
@@ -191,8 +191,14 @@ export default function DocTalkieChat({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [botName, setBotName] = useState<string>("DocTalkie Assistant");
   const [isNameLoading, setIsNameLoading] = useState<boolean>(true);
+  const [nameFetchError, setNameFetchError] = useState<boolean>(false);
 
-  const { messages, isLoading, error, sendMessage } = useDocTalkie({
+  const {
+    messages,
+    isLoading,
+    error: messageSendError,
+    sendMessage,
+  } = useDocTalkie({
     apiURL,
     apiKey,
     initialMessages: [
@@ -241,24 +247,29 @@ export default function DocTalkieChat({
   useEffect(() => {
     const fetchBotName = async () => {
       setIsNameLoading(true);
+      setNameFetchError(false);
       const nameUrl = `${apiURL.replace(/\/?$/, "")}/getName`;
       try {
         const response = await fetch(nameUrl);
         if (!response.ok) {
           console.warn(`Failed to fetch bot name: ${response.status}`);
           setBotName("DocTalkie Assistant");
+          setNameFetchError(true);
           return;
         }
         const data = await response.json();
         if (data.name) {
           setBotName(data.name);
+          setNameFetchError(false);
         } else {
           console.warn("Bot name not found in API response.");
           setBotName("DocTalkie Assistant");
+          setNameFetchError(true);
         }
       } catch (err) {
         console.error("Error fetching bot name:", err);
         setBotName("DocTalkie Assistant");
+        setNameFetchError(true);
       } finally {
         setIsNameLoading(false);
       }
@@ -267,16 +278,14 @@ export default function DocTalkieChat({
     fetchBotName();
   }, [apiURL]);
 
-  // --- Style Objects ---
-
-  const rootStyle: React.CSSProperties = {
+  // --- Base Style Objects (minimal changes, remove things handled by CSS) ---
+  const rootStyleBase: React.CSSProperties = {
     position: "fixed",
     zIndex: 50,
     ...(position === "bottom-right"
       ? { bottom: "1.5rem", right: "1.5rem" }
       : { bottom: "1.5rem", left: "1.5rem" }),
   };
-
   const chatCardBaseStyle: React.CSSProperties = {
     position: "absolute",
     bottom: "4rem", // bottom-16 equivalent if toggle button is h-12 + bottom-6 padding = 4rem
@@ -293,17 +302,14 @@ export default function DocTalkieChat({
     transitionTimingFunction: "ease-out",
     ...(position === "bottom-right" ? { right: "0" } : { left: "0" }),
   };
-
   const chatCardThemeStyle: React.CSSProperties = {
     backgroundColor: currentTheme.background,
     borderColor: currentTheme.border,
     color: currentTheme.text,
   };
-
   const chatCardAnimationStyle: React.CSSProperties = isOpen
     ? { opacity: 1, transform: "scale(1) translateY(0)" }
     : { opacity: 0, transform: "scale(0.95) translateY(1rem)" }; // scale-95 translate-y-4
-
   const headerStyle: React.CSSProperties = {
     display: "flex",
     alignItems: "center",
@@ -314,28 +320,20 @@ export default function DocTalkieChat({
     backgroundColor: currentTheme.headerBg,
     borderBottomColor: currentTheme.border,
   };
-
-  const indicatorStyle: React.CSSProperties = {
-    height: "0.5rem", // h-2
-    width: "0.5rem", // w-2
+  const indicatorBaseStyle: React.CSSProperties = {
+    height: "0.5rem",
+    width: "0.5rem",
     borderRadius: BORDER_RADIUS_FULL,
-    marginRight: "0.5rem", // mr-2
-    animation: "pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
-    backgroundColor: accentColor
-      ? accentColor
-      : theme === "dark"
-      ? colors.dark.text // white
-      : colors.light.userMsgBg, // primary equivalent for light/doctalkie
+    marginRight: "0.5rem",
+    // Animation handled by CSS class
   };
-
   const headerTextStyle: React.CSSProperties = {
     fontWeight: 500, // font-medium
     color: currentTheme.text,
   };
-
   const closeButtonStyle: React.CSSProperties = {
-    height: "2rem", // h-8
-    width: "2rem", // w-8
+    height: "2rem",
+    width: "2rem",
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
@@ -344,10 +342,8 @@ export default function DocTalkieChat({
     backgroundColor: "transparent",
     border: "none",
     cursor: "pointer",
-    // Basic hover included, can be improved with state
-    // ':hover': { color: currentTheme.closeIconHover } // Needs CSS-in-JS library or state handling
+    transition: "color 0.2s ease-out", // Add transition for hover color
   };
-
   const messagesContainerStyle: React.CSSProperties = {
     flex: "1 1 0%",
     overflowY: "auto",
@@ -356,7 +352,6 @@ export default function DocTalkieChat({
     flexDirection: "column",
     gap: "0.75rem", // gap-3
   };
-
   const errorStyle: React.CSSProperties = {
     padding: "0.5rem", // p-2
     marginBottom: "0.5rem", // mb-2
@@ -367,7 +362,6 @@ export default function DocTalkieChat({
     borderRadius: BORDER_RADIUS,
     border: "1px solid #fecaca", // border-red-300
   };
-
   const getMessageStyle = (
     sender: "user" | "assistant"
   ): React.CSSProperties => {
@@ -391,7 +385,6 @@ export default function DocTalkieChat({
       lineHeight: 1.5,
     };
   };
-
   const loaderContainerStyle: React.CSSProperties = {
     display: "flex",
     alignItems: "center",
@@ -399,14 +392,13 @@ export default function DocTalkieChat({
     height: "100%",
     minHeight: "20px",
   };
-
-  const loaderStyle: React.CSSProperties = {
-    height: "1rem", // h-4
-    width: "1rem", // w-4
-    animation: "spin 1s linear infinite",
+  const loaderStyleBase: React.CSSProperties = {
+    // Renamed to Base
+    height: "1rem",
+    width: "1rem",
+    // Animation handled by CSS class
     color: currentTheme.loader,
   };
-
   const footerStyle: React.CSSProperties = {
     padding: "0.75rem", // p-3
     borderTopWidth: "1px",
@@ -414,36 +406,28 @@ export default function DocTalkieChat({
     backgroundColor: currentTheme.background,
     borderTopColor: currentTheme.border,
   };
-
   const inputAreaStyle: React.CSSProperties = {
     display: "flex",
     alignItems: "flex-end", // items-end
     gap: "0.5rem", // gap-2
   };
-
   const textareaBaseStyle: React.CSSProperties = {
     flex: "1 1 0%",
-    border: "none", // border-0
-    borderRadius: BORDER_RADIUS, // rounded-md
+    border: "none",
+    borderRadius: BORDER_RADIUS,
     resize: "none",
-    padding: "0.5rem", // p-2
-    fontSize: BASE_FONT_SIZE, // text-sm
-    outline: "2px solid transparent",
-    outlineOffset: "2px",
-    // focus-visible:ring-1 needs JS focus handling or different approach
-    // We'll use a simple blue outline on focus for now
-    // ':focus-visible': { outline: `1px solid ${accentColor || currentTheme.ring}` } // Needs CSS-in-JS or state
+    padding: "0.5rem",
+    fontSize: BASE_FONT_SIZE,
+    // Outline handled by CSS
   };
-
   const textareaThemeStyle: React.CSSProperties = {
     backgroundColor: currentTheme.inputBg,
     color: currentTheme.text,
-    // placeholder styling needs ::placeholder pseudo-element, hard to do inline
+    // Placeholder color handled by CSS
   };
-
-  const sendButtonStyle: React.CSSProperties = {
-    height: "2.5rem", // h-10
-    width: "2.5rem", // w-10
+  const sendButtonStyleBase: React.CSSProperties = {
+    height: "2.5rem",
+    width: "2.5rem",
     flexShrink: 0,
     display: "inline-flex",
     alignItems: "center",
@@ -451,16 +435,16 @@ export default function DocTalkieChat({
     borderRadius: BORDER_RADIUS,
     border: "none",
     cursor: "pointer",
+    transition: "background-color 0.2s ease-out, opacity 0.2s ease-out", // Add transitions
+    // Disabled state handled by CSS
+  };
+  const sendButtonThemeStyle: React.CSSProperties = {
     backgroundColor: accentColor ? accentColor : currentTheme.buttonBg,
     color: accentColor ? "#ffffff" : currentTheme.buttonText,
-    // Basic hover included
-    // ':hover': { backgroundColor: accentColor ? accentColor : currentTheme.buttonHoverBg }, // Needs CSS-in-JS or state
-    // ':disabled': { opacity: 0.7, cursor: 'not-allowed' } // Basic disabled style
   };
-
   const toggleButtonBaseStyle: React.CSSProperties = {
-    height: "3rem", // h-12
-    width: "3rem", // w-12
+    height: "3rem",
+    width: "3rem",
     borderRadius: BORDER_RADIUS_FULL,
     boxShadow: SHADOW_LG,
     display: "inline-flex",
@@ -468,9 +452,9 @@ export default function DocTalkieChat({
     justifyContent: "center",
     border: "none",
     cursor: "pointer",
-    // animation for pulse needs @keyframes, hard to do inline
+    transition: "background-color 0.2s ease-out", // Add transition
+    // Pulse animation handled by CSS class conditionally
   };
-
   const getToggleButtonThemeStyle = (): React.CSSProperties => {
     if (accentColor) {
       return { backgroundColor: accentColor, color: "#ffffff" };
@@ -498,8 +482,6 @@ export default function DocTalkieChat({
           };
     }
   };
-
-  // --- Pre component for Markdown ---
   const PreComponent = ({
     node,
     ...props
@@ -516,12 +498,43 @@ export default function DocTalkieChat({
     return <pre style={preStyle} {...props} />;
   };
 
+  // --- Calculate CSS Variables ---
+  const cssVariables: React.CSSProperties = {
+    "--dt-ring-color": accentColor || currentTheme.ring,
+    "--dt-placeholder-color": currentTheme.placeholder,
+    "--dt-button-hover-bg": accentColor
+      ? accentColor
+      : currentTheme.buttonHoverBg, // Keep accent on hover if set
+    "--dt-close-hover-color": currentTheme.closeIconHover,
+    "--dt-toggle-hover-bg": accentColor
+      ? accentColor // Keep accent on hover if set
+      : isOpen
+      ? currentTheme.toggleOpenHoverBg
+      : currentTheme.buttonHoverBg, // Hover depends on open state if no accent
+    // Convert HSL/HEX of primary button bg to RGB for pulse animation
+    // This is a simplified conversion, might need a robust library for perfect accuracy
+    "--dt-pulse-color-rgb":
+      theme === "light"
+        ? "31, 41, 55" // dark grey approx for light theme pulse
+        : "255, 255, 255", // white for dark/doctalkie pulse
+  } as React.CSSProperties;
+
+  // Determine if pulse animation should be active
+  const shouldPulse =
+    !isOpen && !accentColor && (theme === "dark" || theme === "doctalkie");
+
+  // Определяем цвет индикатора
+  const getIndicatorColor = (): string => {
+    if (isNameLoading) return "#facc15"; // Желтый (loading - tailwind yellow-400)
+    if (nameFetchError) return "#ef4444"; // Красный (error - tailwind red-500)
+    return "#22c55e"; // Зеленый (success - tailwind green-500)
+  };
+
   // --- JSX ---
   return (
-    // Add the passed className to the root div
-    <div style={rootStyle} className={className}>
+    <div style={{ ...rootStyleBase, ...cssVariables }} className={className}>
       {isRendered && (
-        <div // Replaced Card with div
+        <div
           style={{
             ...chatCardBaseStyle,
             ...chatCardThemeStyle,
@@ -531,36 +544,42 @@ export default function DocTalkieChat({
           {/* Header */}
           <div style={headerStyle}>
             <div style={{ display: "flex", alignItems: "center" }}>
-              <div style={indicatorStyle}>
-                {/* Pulse animation would require CSS @keyframes */}
-              </div>
+              {/* Добавлен индикатор с динамическим цветом */}
+              <div
+                className="dt-chat-indicator"
+                style={{
+                  ...indicatorBaseStyle,
+                  backgroundColor: getIndicatorColor(),
+                }}
+              ></div>
               <span style={headerTextStyle}>
                 {isNameLoading ? "Loading..." : botName}
               </span>
             </div>
-            <button // Replaced Button with button
+            {/* Added close button class, removed hover handlers */}
+            <button
+              className="dt-chat-close-button"
               style={closeButtonStyle}
               onClick={toggleChat}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.color = currentTheme.closeIconHover)
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.color = currentTheme.closeIcon)
-              }
             >
-              <IconX style={{ height: "1rem", width: "1rem" }} />{" "}
-              {/* h-4 w-4 */}
+              <IconX style={{ height: "1rem", width: "1rem" }} />
             </button>
           </div>
 
           {/* Messages Area */}
           <div style={messagesContainerStyle}>
-            {error && <div style={errorStyle}>{error}</div>}
+            {messageSendError && (
+              <div style={errorStyle}>{messageSendError}</div>
+            )}
             {messages.map((message) => (
               <div key={message.id} style={getMessageStyle(message.sender)}>
                 {message.isLoading ? (
                   <div style={loaderContainerStyle}>
-                    <IconLoader style={loaderStyle} />
+                    {/* Added loader class, removed inline animation */}
+                    <IconLoader
+                      className="dt-chat-loader"
+                      style={loaderStyleBase}
+                    />
                   </div>
                 ) : (
                   <ReactMarkdown
@@ -584,37 +603,25 @@ export default function DocTalkieChat({
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Type your message..."
+                // Added textarea class, combined styles, removed focus handlers
+                className="dt-chat-textarea"
                 style={{ ...textareaBaseStyle, ...textareaThemeStyle } as any}
-                // Focus styles need more work for ring simulation
-                onFocus={(e) =>
-                  (e.target.style.outline = `1px solid ${
-                    accentColor || currentTheme.ring
-                  }`)
-                }
-                onBlur={(e) =>
-                  (e.target.style.outline = "2px solid transparent")
-                }
                 minRows={1}
                 maxRows={4}
                 disabled={isLoading}
               />
-              <button // Replaced Button with button
-                style={{
-                  ...sendButtonStyle,
-                  ...(isLoading || !input.trim()
-                    ? { opacity: 0.7, cursor: "not-allowed" }
-                    : {}),
-                }}
+              {/* Added send button class, combined styles, removed disabled style logic */}
+              <button
+                className="dt-chat-send-button"
+                style={{ ...sendButtonStyleBase, ...sendButtonThemeStyle }}
                 onClick={handleTriggerSend}
                 disabled={!input.trim() || isLoading}
               >
                 {isLoading ? (
+                  // Added loader class, removed inline animation
                   <IconLoader
-                    style={{
-                      height: "1rem",
-                      width: "1rem",
-                      animation: "spin 1s linear infinite",
-                    }}
+                    className="dt-chat-loader"
+                    style={{ height: "1rem", width: "1rem" }}
                   />
                 ) : (
                   <IconSend style={{ height: "1rem", width: "1rem" }} />
@@ -626,18 +633,18 @@ export default function DocTalkieChat({
       )}
 
       {/* Toggle Button */}
-      <button // Replaced Button with button
+      <button
+        // Added toggle button class and conditional pulse class
+        className={`dt-chat-toggle-button ${
+          shouldPulse ? "dt-chat-pulse-glow" : ""
+        }`}
         style={{ ...toggleButtonBaseStyle, ...getToggleButtonThemeStyle() }}
         onClick={toggleChat}
       >
         {isOpen ? (
-          <IconX
-            style={{ height: "1.25rem", width: "1.25rem" }}
-          /> /* h-5 w-5 */
+          <IconX style={{ height: "1.25rem", width: "1.25rem" }} />
         ) : (
-          <IconMessageCircle
-            style={{ height: "1.25rem", width: "1.25rem" }}
-          /> /* h-5 w-5 */
+          <IconMessageCircle style={{ height: "1.25rem", width: "1.25rem" }} />
         )}
       </button>
     </div>
