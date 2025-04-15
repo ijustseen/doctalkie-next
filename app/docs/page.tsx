@@ -14,7 +14,7 @@ import {
   Zap,
 } from "lucide-react";
 import { DocsSidebarNav } from "@/components/docs-sidebar-nav";
-import DocTalkieChat from "@/components/doc-talkie-chat/doc-talkie-chat";
+import { DocTalkieChat } from "doctalkie-react";
 
 export default function DocsPage() {
   return (

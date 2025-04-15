@@ -1,6 +1,8 @@
+"use client";
+
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import DocTalkieChat from "@/components/doc-talkie-chat/doc-talkie-chat";
+import { DocTalkieChat } from "doctalkie-react";
 import CodeBlock from "@/components/code-block";
 import { ArrowRight, CheckCircle2, Code, FileText, Zap } from "lucide-react";
 

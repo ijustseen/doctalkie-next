@@ -2,8 +2,7 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import DashboardClient from "@/components/dashboard-client";
-import DocTalkieChat from "@/components/doc-talkie-chat/doc-talkie-chat";
-
+import { DocTalkieChat } from "doctalkie-react";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
