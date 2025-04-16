@@ -339,7 +339,6 @@ export default function DashboardClient({
         name: assistantName, // Use the current name from state
         strict_context: projectOnly, // Use current switch state
         api_key: newApiKey,
-        api_url: newApiUrl,
       })
       .select()
       .single();
