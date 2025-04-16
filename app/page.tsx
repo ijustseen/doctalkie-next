@@ -53,7 +53,7 @@ export default function Home() {
                 Just install our package and add a single component to your app.
                 DocTalkie handles the rest.
               </p>
-              <div className="space-y-2">
+              <div className="space-y-2 overflow-hidden">
                 <CodeBlock code="npm install doctalkie-react" language="bash" />
                 <div className="text-center text-sm text-muted-foreground my-1">
                   or
@@ -73,7 +73,7 @@ export default function Home() {
                       MyApp.jsx
                     </div>
                   </div>
-                  <div className="space-y-2 font-mono text-sm">
+                  <div className="space-y-2 font-mono text-sm overflow-x-auto max-w-full">
                     <div>
                       <span className="text-doctalkie-400">import</span>{" "}
                       <span className="text-foreground">React</span>{" "}
@@ -273,7 +273,7 @@ export default function Home() {
       </section>
 
       <DocTalkieChat
-        apiURL="http://localhost:3000/api/chat/a6ef5aab-2722-4736-b699-d68c4e38ae1a"
+        apiURL={`${process.env.NEXT_PUBLIC_BASE_URL}/api/chat/a6ef5aab-2722-4736-b699-d68c4e38ae1a`}
         apiKey="dt_4a8b0aa6-bbe6-468b-a3eb-fe4f1e46297e"
         theme="doctalkie"
       />

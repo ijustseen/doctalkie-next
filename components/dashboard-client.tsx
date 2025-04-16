@@ -1142,8 +1142,8 @@ function MyComponent() {
       </div>
       {/* ДОБАВЛЯЕМ ЧАТ-ВИДЖЕТ ЗДЕСЬ */}
       <DocTalkieChat
-        apiURL="http://localhost:3000/api/chat/a6ef5aab-2722-4736-b699-d68c4e38ae1a" // TODO: Использовать динамический URL из состояния bot?
-        apiKey="dt_4a8b0aa6-bbe6-468b-a3eb-fe4f1e46297e" // TODO: Использовать динамический ключ из состояния bot?
+        apiURL={`${process.env.NEXT_PUBLIC_BASE_URL}/api/chat/a6ef5aab-2722-4736-b699-d68c4e38ae1a`}
+        apiKey="dt_4a8b0aa6-bbe6-468b-a3eb-fe4f1e46297e"
         theme="doctalkie"
       />
     </>
