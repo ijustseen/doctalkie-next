@@ -1142,7 +1142,7 @@ function MyComponent() {
       </div>
       {/* ДОБАВЛЯЕМ ЧАТ-ВИДЖЕТ ЗДЕСЬ */}
       <DocTalkieChat
-        apiURL={`doctalkie-next.vercel.app/api/chat/a6ef5aab-2722-4736-b699-d68c4e38ae1a`}
+        apiURL={`https://doctalkie-next.vercel.app/api/chat/a6ef5aab-2722-4736-b699-d68c4e38ae1a`}
         apiKey="dt_4a8b0aa6-bbe6-468b-a3eb-fe4f1e46297e"
         theme="doctalkie"
       />
