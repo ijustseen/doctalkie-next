@@ -1,4 +1,4 @@
-[DocTalkie demo](https://youtu.be/GKDjU4W4Zek)
+[![DocTalkie demo](public/demo.png)](https://youtu.be/GKDjU4W4Zek)
 
 # DocTalkie - AI Assistant Integration Service
 
